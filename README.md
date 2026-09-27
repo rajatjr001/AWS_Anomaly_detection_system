@@ -16,7 +16,7 @@ Outputs:
 - `aws_anomaly_dashboard.png` — visualization (temperature/humidity time series with flagged points, anomaly score plot)
 - Console output — EDA summary, train/val split info, simulated real-time scoring, precision/recall/F1 evaluation
 
-## How the code maps to the synopsis's methodology (Section 6)
+## How the code 
 
 | Synopsis Step | Function |
 |---|---|
@@ -46,7 +46,7 @@ still runs, it just skips the evaluation step (real deployments won't have
 ground-truth labels anyway — the synthetic-label evaluation here is only to
 demonstrate/validate the approach for the project report).
 
-## Extending toward the "Expected Outcomes" in the synopsis
+## Extending toward the "Expected Outcomes"
 
 - **Live AWS/IoT integration**: replace `generate_synthetic_aws_data()` with a
   reader for your station's API/serial feed, and call
