@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Anomaly Watch</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<style>
+:root{
+  --bg:#080d13;
+  --panel:#101923;
+  --panel2:#0d151e;
+  --line:#203040;
+  --text:#e5edf5;
+  --muted:#7f91a5;
+  --cyan:#42d6ca;
+  --cyan2:#1b6e69;
+  --green:#55d68a;
+  --yellow:#e8b44f;
+  --red:#ef6259;
+  --blue:#6ea8ff;
+  --shadow:0 18px 45px rgba(0,0,0,.22);
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{
+  margin:0; min-height:100vh; color:var(--text);
+  font-family:var(--sans);
+  background:
+    radial-gradient(circle at 15% -10%,rgba(66,214,202,.09),transparent 28%),
+    radial-gradient(circle at 90% 0%,rgba(110,168,255,.07),transparent 24%),
+    var(--bg);
+  padding:26px clamp(14px,3.5vw,46px) 55px;
+}
+button,input{font:inherit}
+button{cursor:pointer}
+.container{max-width:1500px;margin:auto}
+
+/* Header */
+.header{
+  display:flex;justify-content:space-between;align-items:center;gap:20px;
+  padding:8px 0 22px;border-bottom:1px solid var(--line);margin-bottom:20px;
+}
+.brand{display:flex;gap:13px;align-items:center}
+.brand-dot{
+  width:12px;height:12px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 0 5px rgba(66,214,202,.08),0 0 22px rgba(66,214,202,.55);
+}
+h1{font-size:24px;margin:0;font-weight:700;letter-spacing:.01em}
+.subtitle{font:12px var(--mono);color:var(--muted);margin-top:5px}
+.status{
+  display:flex;align-items:center;gap:9px;border:1px solid var(--line);
+  background:rgba(16,25,35,.8);padding:9px 13px;border-radius:999px;
+  font:11px var(--mono);color:var(--muted);white-space:nowrap;
+}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.status.live{color:var(--cyan);border-color:#225d59}
+.status.live .status-dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+
+/* Controls */
+.controls{
+  display:flex;align-items:end;gap:12px;flex-wrap:wrap;
+  padding:15px;background:rgba(16,25,35,.88);border:1px solid var(--line);
+  border-radius:14px;box-shadow:var(--shadow);margin-bottom:18px;
+}
+.control{display:flex;flex-direction:column;gap:5px}
+.control label{font:10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.control input{
+  width:105px;padding:9px 10px;color:var(--text);background:#091019;
+  border:1px solid var(--line);border-radius:8px;outline:none;
+}
+.control input:focus{border-color:var(--cyan2)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.btn{
+  border:1px solid #286d68;background:linear-gradient(180deg,#195c57,#10423e);
+  color:#eafffb;padding:9px 15px;border-radius:8px;font-weight:600;font-size:12px;
+}
+.btn:hover{filter:brightness(1.15)}
+.btn.secondary{background:#0c141d;border-color:var(--line);color:var(--text)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:18px}
+.card{
+  background:linear-gradient(145deg,rgba(17,27,38,.98),rgba(12,19,28,.98));
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+}
+.kpi{padding:17px 18px;position:relative;overflow:hidden}
+.kpi:after{
+  content:"";position:absolute;width:90px;height:90px;border-radius:50%;
+  right:-35px;top:-35px;background:currentColor;opacity:.035;
+}
+.kpi-head{display:flex;justify-content:space-between;align-items:center}
+.kpi-label{font:10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.kpi-icon{font-size:15px}
+.kpi-value{font:600 30px var(--mono);margin:9px 0 3px}
+.kpi-foot{font-size:11px;color:var(--muted)}
+.kpi.good{color:var(--green)}.kpi.warn{color:var(--yellow)}.kpi.bad{color:var(--red)}.kpi.info{color:var(--cyan)}
+
+/* Layout */
+.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(310px,1fr);gap:18px}
+.grid.bottom{margin-top:18px}
+.panel{padding:18px;border-radius:14px}
+.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.panel-title h2{
+  margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.09em;
+  color:#9aacbf;font-weight:600;
+}
+.panel-meta{font:10px var(--mono);color:var(--muted)}
+.chart-wrap{height:385px;position:relative}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+
+/* Sensor tabs */
+.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px}
+.tab{
+  border:1px solid var(--line);background:#0b131c;color:var(--muted);
+  border-radius:8px;padding:7px 11px;font-size:11px;font-weight:600;
+}
+.tab.active{color:#eafffb;background:#14514c;border-color:#286d68}
+.tab:hover{border-color:#35606a}
+
+/* Live feed */
+.feed-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.live-badge{font:10px var(--mono);color:var(--cyan);border:1px solid #225d59;border-radius:999px;padding:5px 8px}
+.stream-log{
+  height:385px;overflow:auto;display:flex;flex-direction:column;gap:7px;
+  padding-right:3px;
+}
+.empty{height:100%;display:grid;place-items:center;text-align:center;color:var(--muted);font:11px var(--mono);line-height:1.7}
+.stream-row{
+  background:#0b131c;border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+  display:grid;grid-template-columns:1fr auto;gap:7px;font-size:11px;
+}
+.stream-time{font:10px var(--mono);color:var(--muted)}
+.stream-data{color:#c7d3df;margin-top:3px}
+.stream-status{grid-row:1/3;align-self:center;font:600 10px var(--mono);padding:5px 7px;border-radius:6px}
+.stream-row.good .stream-status{color:var(--green);background:rgba(85,214,138,.08)}
+.stream-row.suspicious .stream-status{color:var(--yellow);background:rgba(232,180,79,.08)}
+.stream-row.bad .stream-status{color:var(--red);background:rgba(239,98,89,.08)}
+
+/* Metrics */
+.metrics-table{width:100%;border-collapse:collapse;font:11px var(--mono)}
+.metrics-table th{color:var(--muted);font-weight:500;text-align:left;padding:8px;border-bottom:1px solid var(--line)}
+.metrics-table td{padding:10px 8px;border-bottom:1px solid rgba(32,48,64,.65)}
+.metric-name{font-weight:600;color:#d9e4ee}
+.metric-bar{height:5px;background:#182330;border-radius:5px;overflow:hidden;margin-top:5px;width:120px}
+.metric-fill{height:100%;border-radius:5px;background:var(--cyan)}
+.score{color:#dbe7f1}
+.missing-wrap{height:260px}
+
+/* Pipeline status */
+.pipeline{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:14px}
+.stage{padding:10px;background:#0b131c;border:1px solid var(--line);border-radius:9px}
+.stage-top{display:flex;align-items:center;gap:7px;font:10px var(--mono);color:#bdcbd8}
+.stage-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(85,214,138,.45)}
+.stage-sub{font-size:9px;color:var(--muted);margin-top:4px}
+
+
+/* Manual sensor input */
+.manual-panel{
+  margin-top:18px;
+}
+
+.manual-description{
+  color:var(--muted);
+  font:10px var(--mono);
+  margin-top:5px;
+}
+
+.manual-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+}
+
+.manual-field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.manual-field label{
+  font:10px var(--mono);
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+
+.manual-field input{
+  width:100%;
+  padding:11px 12px;
+  color:var(--text);
+  background:#091019;
+  border:1px solid var(--line);
+  border-radius:8px;
+  outline:none;
+}
+
+.manual-field input:focus{
+  border-color:var(--cyan2);
+  box-shadow:0 0 0 2px rgba(66,214,202,.07);
+}
+
+.manual-actions{
+  display:flex;
+  gap:8px;
+  margin-top:13px;
+}
+
+.manual-result{
+  margin-top:14px;
+  min-height:20px;
+  padding:12px;
+  border:1px solid var(--line);
+  background:#0b131c;
+  border-radius:9px;
+  color:#c7d3df;
+  font:11px var(--mono);
+}
+
+.manual-result:empty{
+  display:none;
+}
+
+.manual-result h3{
+  margin:0 0 10px;
+  font:600 14px var(--mono);
+}
+
+.manual-result.normal h3{color:var(--green)}
+.manual-result.suspicious h3{color:var(--yellow)}
+.manual-result.anomalous h3{color:var(--red)}
+
+.manual-result-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+}
+
+.manual-result-item{
+  padding:8px;
+  border:1px solid rgba(32,48,64,.7);
+  border-radius:7px;
+  background:#091019;
+}
+
+.manual-result-item span{
+  display:block;
+  color:var(--muted);
+  font-size:9px;
+  margin-bottom:3px;
+}
+
+.manual-error{
+  color:var(--red);
+}
+
+@media(max-width:1050px){
+  .manual-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+@media(max-width:600px){
+  .manual-grid{grid-template-columns:1fr}
+  .manual-actions{flex-direction:column}
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#263747;border-radius:10px}
+
+/* Mobile */
+@media(max-width:1050px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid{grid-template-columns:1fr}
+  .actions{margin-left:0}
+}
+@media(max-width:600px){
+  body{padding:16px 11px 35px}
+  .header{align-items:flex-start;flex-direction:column}
+  .controls{align-items:stretch}
+  .control input{width:100%}
+  .actions{width:100%}
+  .actions .btn{flex:1}
+  .kpis{grid-template-columns:1fr 1fr}
+  .chart-wrap{height:300px}
+  .stream-log{height:300px}
+  .pipeline{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header class="header">
+  <div>
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div>
+        <h1>AWS Anomaly Watch</h1>
+        <div class="subtitle">real-time anomaly detection &amp; data-quality assessment for automatic weather stations</div>
+      </div>
+    </div>
+  </div>
+  <div id="statusPill" class="status">
+    <span class="status-dot"></span>
+    <span id="statusText">IDLE · NO DATA LOADED</span>
+  </div>
+</header>
+
+<section class="controls">
+  <div class="control">
+    <label>Days of history</label>
+    <input type="number" id="nDays" value="21" min="3" max="90">
+  </div>
+  <div class="control">
+    <label>Anomaly rate</label>
+    <input type="number" id="anomFrac" value="0.03" step="0.01" min="0" max="0.3">
+  </div>
+  <div class="control">
+    <label>Live points</label>
+    <input type="number" id="nStream" value="40" min="5" max="300">
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="runBtn">▶ Run pipeline</button>
+    <button class="btn secondary" id="streamBtn" disabled>▶ Step feed</button>
+    <button class="btn secondary" id="streamAllBtn" disabled>▶▶ Play feed</button>
+    <button class="btn secondary" id="streamResetBtn" disabled>↻ Reset</button>
+  </div>
+</section>
+
+<section class="kpis">
+  <div class="card kpi good">
+    <div class="kpi-head"><span class="kpi-label">Normal / good</span><span class="kpi-icon">●</span></div>
+    <div class="kpi-value" id="kpiGood">–</div>
+    <div class="kpi-foot" id="goodPct">Healthy observations</div>
+  </div>
+  <div class="card kpi warn">
+    <div class="kpi-head"><span class="kpi-label">Suspicious</span><span class="kpi-icon">●</span></div>
+    <div class="kpi-value" id="kpiSusp">–</div>
+    <div class="kpi-foot">Needs attention</div>
+  </div>
+  <div class="card kpi bad">
+    <div class="kpi-head"><span class="kpi-label">Anomalous</span><span class="kpi-icon">●</span></div>
+    <div class="kpi-value" id="kpiBad">–</div>
+    <div class="kpi-foot">Requires review</div>
+  </div>
+  <div class="card kpi info">
+    <div class="kpi-head"><span class="kpi-label">Stream queue</span><span class="kpi-icon">◌</span></div>
+    <div class="kpi-value" id="kpiQueue">–</div>
+    <div class="kpi-foot">Simulated live observations</div>
+  </div>
+</section>
+
+
+<section class="card panel manual-panel">
+  <div class="panel-title">
+    <div>
+      <h2>Manual sensor input</h2>
+      <div class="manual-description">
+        Enter a sensor observation and analyze it with Isolation Forest + LOF.
+      </div>
+    </div>
+    <span class="panel-meta">ML ANALYSIS</span>
+  </div>
+
+  <div class="manual-grid">
+    <div class="manual-field">
+      <label for="manualTemperature">Temperature (°C)</label>
+      <input type="number" id="manualTemperature" placeholder="e.g. 25" step="0.01">
+    </div>
+
+    <div class="manual-field">
+      <label for="manualHumidity">Humidity (%)</label>
+      <input type="number" id="manualHumidity" placeholder="e.g. 70" step="0.01">
+    </div>
+
+    <div class="manual-field">
+      <label for="manualPressure">Pressure (hPa)</label>
+      <input type="number" id="manualPressure" placeholder="e.g. 1013" step="0.01">
+    </div>
+
+    <div class="manual-field">
+      <label for="manualWindSpeed">Wind speed (m/s)</label>
+      <input type="number" id="manualWindSpeed" placeholder="e.g. 4" step="0.01">
+    </div>
+  </div>
+
+  <div class="manual-actions">
+    <button class="btn" id="manualAnalyzeBtn">Analyze sensor data</button>
+    <button class="btn secondary" id="manualClearBtn">Clear</button>
+  </div>
+
+  <div id="manualResult" class="manual-result"></div>
+</section>
+
+<div class="grid">
+  <section class="card panel">
+    <div class="panel-title">
+      <h2>Sensor monitoring</h2>
+      <span class="panel-meta" id="chartMeta">No data</span>
+    </div>
+
+    <div class="tabs" id="varToggle">
+      <button class="tab active" data-var="temperature">🌡 Temperature</button>
+      <button class="tab" data-var="humidity">💧 Humidity</button>
+      <button class="tab" data-var="pressure">◉ Pressure</button>
+      <button class="tab" data-var="wind_speed">💨 Wind speed</button>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="seriesChart"></canvas>
+    </div>
+  </section>
+
+  <section class="card panel">
+    <div class="panel-title">
+      <h2>Live station feed</h2>
+      <span class="live-badge">● LIVE SIMULATION</span>
+    </div>
+
+    <div id="streamLog" class="stream-log">
+      <div class="empty">
+        Run the pipeline first.<br>
+        Then step or play the simulated station feed.
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="grid bottom">
+  <section class="card panel">
+    <div class="panel-title">
+      <h2>Detector evaluation</h2>
+      <span class="panel-meta">vs injected ground truth</span>
+    </div>
+
+    <table class="metrics-table" id="metricsTable">
+      <thead>
+        <tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th></tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="4" style="color:var(--muted)">Run the pipeline to see evaluation metrics.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pipeline">
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>Data generation</div><div class="stage-sub">Synthetic AWS observations</div></div>
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>Preprocessing</div><div class="stage-sub">Cleaning &amp; validation</div></div>
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>Feature engineering</div><div class="stage-sub">Derived sensor features</div></div>
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>Isolation Forest</div><div class="stage-sub">Global anomaly detector</div></div>
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>LOF</div><div class="stage-sub">Local outlier detector</div></div>
+      <div class="stage"><div class="stage-top"><span class="stage-dot"></span>Data quality</div><div class="stage-sub">Missingness assessment</div></div>
+    </div>
+  </section>
+
+  <section class="card panel">
+    <div class="panel-title">
+      <h2>Missing observations</h2>
+      <span class="panel-meta">by sensor</span>
+    </div>
+    <div class="missing-wrap">
+      <canvas id="missingChart"></canvas>
+    </div>
+  </section>
+</div>
+
+</div>
+
+<script>
+const statusPill = document.getElementById('statusPill');
+const statusText = document.getElementById('statusText');
+const runBtn = document.getElementById('runBtn');
+const streamBtn = document.getElementById('streamBtn');
+const streamAllBtn = document.getElementById('streamAllBtn');
+const streamResetBtn = document.getElementById('streamResetBtn');
+const streamLog = document.getElementById('streamLog');
+const queueKpi = document.getElementById('kpiQueue');
+const chartMeta = document.getElementById('chartMeta');
+
+let currentVar = 'temperature';
+let seriesChart = null;
+let missingChart = null;
+let streaming = false;
+
+const variableNames = {
+  temperature: 'Temperature',
+  humidity: 'Humidity',
+  pressure: 'Pressure',
+  wind_speed: 'Wind speed'
+};
+
+const variableUnits = {
+  temperature: '°C',
+  humidity: '%',
+  pressure: 'hPa',
+  wind_speed: 'm/s'
+};
+
+function setStatus(text, live=false) {
+  statusText.textContent = text;
+  statusPill.classList.toggle('live', live);
+}
+
+function formatNumber(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '—';
+  return Number(v).toLocaleString(undefined, {maximumFractionDigits:2});
+}
+
+function statusClass(s) {
+  if (s === 'Normal/Good') return 'good';
+  if (s === 'Suspicious') return 'suspicious';
+  return 'bad';
+}
+
+function buildChartOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {mode:'index', intersect:false},
+    animation: {duration:500},
+    plugins: {
+      legend: {
+        labels: {
+          color:'#b9c8d7',
+          usePointStyle:true,
+          boxWidth:8,
+          font:{family:'IBM Plex Sans',size:11}
+        }
+      },
+      tooltip: {
+        backgroundColor:'#0b131c',
+        borderColor:'#2a3b4d',
+        borderWidth:1,
+        titleColor:'#e5edf5',
+        bodyColor:'#c5d2df',
+        padding:10
+      }
+    },
+    scales: {
+      x: {
+        ticks:{
+          color:'#71859a',
+          maxTicksLimit:8,
+          font:{family:'IBM Plex Mono',size:10},
+          callback:function(value){ 
+            const label=this.getLabelForValue(value);
+            return label ? label.replace('T',' ').slice(5,16) : '';
+          }
+        },
+        grid:{color:'rgba(32,48,64,.5)'}
+      },
+      y: {
+        ticks:{color:'#71859a',font:{family:'IBM Plex Mono',size:10}},
+        grid:{color:'rgba(32,48,64,.5)'}
+      }
+    }
+  };
+}
+
+async function runPipeline() {
+  runBtn.disabled = true;
+  setStatus('RUNNING PIPELINE…');
+
+  try {
+    const body = {
+      n_days:Number(document.getElementById('nDays').value),
+      anomaly_fraction:Number(document.getElementById('anomFrac').value),
+      n_stream:Number(document.getElementById('nStream').value)
+    };
+
+    const res = await fetch('/api/run',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Pipeline failed');
+
+    const good = data.quality_counts['Normal/Good'] || 0;
+    const susp = data.quality_counts['Suspicious'] || 0;
+    const bad = data.quality_counts['Anomalous/Requires Review'] || 0;
+    const total = good+susp+bad;
+
+    document.getElementById('kpiGood').textContent = good.toLocaleString();
+    document.getElementById('kpiSusp').textContent = susp.toLocaleString();
+    document.getElementById('kpiBad').textContent = bad.toLocaleString();
+    queueKpi.textContent = data.n_stream_pending.toLocaleString();
+
+    document.getElementById('goodPct').textContent =
+      total ? `${((good/total)*100).toFixed(1)}% of history` : 'Healthy observations';
+
+    renderMetrics(data.metrics);
+    renderMissing(data.missing_counts);
+    await loadSeries(currentVar);
+
+    chartMeta.textContent = `${data.n_points.toLocaleString()} historical observations`;
+    setStatus(`${data.n_points} OBSERVATIONS · ${data.n_stream_pending} STREAM QUEUED`, true);
+
+    streamBtn.disabled = false;
+    streamAllBtn.disabled = false;
+    streamResetBtn.disabled = false;
+
+    streamLog.innerHTML =
+      '<div class="empty">Feed ready.<br>Step through it or play the full simulation.</div>';
+
+  } catch(err) {
+    setStatus('ERROR: ' + err.message);
+    console.error(err);
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+async function loadSeries(variable) {
+  try {
+    const res = await fetch(`/api/timeseries?variable=${encodeURIComponent(variable)}`);
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.error || 'Unable to load timeseries');
+
+    const points = data.points;
+    const labels = points.map(p => p.timestamp);
+    const values = points.map(p => p[variable]);
+    const flagPoints = points.map(p =>
+      p.ml_anomaly_flag === 1 ? p[variable] : null
+    );
+
+    if (seriesChart) seriesChart.destroy();
+
+    const ctx = document.getElementById('seriesChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0,0,0,380);
+    gradient.addColorStop(0,'rgba(66,214,202,.25)');
+    gradient.addColorStop(1,'rgba(66,214,202,0)');
+
+    seriesChart = new Chart(ctx,{
+      type:'line',
+      data:{
+        labels,
+        datasets:[
+          {
+            label:variableNames[variable],
+            data:values,
+            borderColor:'#42d6ca',
+            backgroundColor:gradient,
+            fill:true,
+            borderWidth:2,
+            pointRadius:0,
+            pointHoverRadius:5,
+            tension:.25,
+            spanGaps:true
+          },
+          {
+            label:'Flagged anomaly',
+            data:flagPoints,
+            borderColor:'#ef6259',
+            backgroundColor:'#ef6259',
+            pointRadius:5,
+            pointHoverRadius:7,
+            showLine:false
+          }
+        ]
+      },
+      options:buildChartOptions()
+    });
+
+    chartMeta.textContent =
+      `${variableNames[variable]} · ${points.length.toLocaleString()} points`;
+
+  } catch(err) {
+    console.error(err);
+    chartMeta.textContent = 'Chart error';
+    setStatus('ERROR: ' + err.message);
+  }
+}
+
+function renderMetrics(metrics) {
+  const tbody = document.querySelector('#metricsTable tbody');
+
+  if (!metrics) {
+    tbody.innerHTML =
+      '<tr><td colspan="4" style="color:var(--muted)">No ground truth available.</td></tr>';
+    return;
+  }
+
+  const labels = {
+    iso_forest_anomaly:'Isolation Forest',
+    lof_anomaly:'Local Outlier Factor',
+    ml_anomaly_flag:'Combined detector'
+  };
+
+  tbody.innerHTML = Object.entries(metrics).map(([key,m]) => {
+    const f1 = Number(m.f1_score) || 0;
+    return `
+      <tr>
+        <td>
+          <div class="metric-name">${labels[key] || key}</div>
+          <div class="metric-bar"><div class="metric-fill" style="width:${Math.max(0,Math.min(100,f1*100))}%"></div></div>
+        </td>
+        <td class="score">${m.precision}</td>
+        <td class="score">${m.recall}</td>
+        <td class="score">${m.f1_score}</td>
+      </tr>`;
+  }).join('');
+}
+
+function renderMissing(counts) {
+  if (missingChart) missingChart.destroy();
+
+  const labels = Object.keys(counts).map(x =>
+    x.replace('_was_missing','').replace('_',' ')
+  );
+  const values = Object.values(counts);
+
+  missingChart = new Chart(
+    document.getElementById('missingChart').getContext('2d'),
+    {
+      type:'bar',
+      data:{
+        labels,
+        datasets:[{
+          data:values,
+          backgroundColor:'#e8b44f',
+          borderRadius:5,
+          maxBarThickness:30
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{ticks:{color:'#7f91a5',font:{family:'IBM Plex Mono',size:9}},grid:{display:false}},
+          y:{beginAtZero:true,ticks:{color:'#7f91a5',font:{family:'IBM Plex Mono',size:9}},grid:{color:'rgba(32,48,64,.5)'}}
+        }
+      }
+    }
+  );
+}
+
+function appendStreamRow(obs) {
+  if (streamLog.querySelector('.empty')) streamLog.innerHTML='';
+
+  const row=document.createElement('div');
+  row.className='stream-row '+statusClass(obs.status);
+
+  row.innerHTML=`
+    <div>
+      <div class="stream-time">${obs.timestamp.replace('T',' ')}</div>
+      <div class="stream-data">
+        T ${formatNumber(obs.temperature)}° ·
+        H ${formatNumber(obs.humidity)}% ·
+        P ${formatNumber(obs.pressure)}
+      </div>
+    </div>
+    <div class="stream-status">${obs.status}</div>
+  `;
+
+  streamLog.prepend(row);
+  queueKpi.textContent =
+    Number(queueKpi.textContent.replace(/,/g,'')) > 0
+      ? Number(queueKpi.textContent.replace(/,/g,''))-1
+      : 0;
+}
+
+async function stepStream() {
+  try {
+    const res=await fetch('/api/stream/next',{method:'POST'});
+    const data=await res.json();
+
+    if (!data.ok) throw new Error(data.error || 'Stream error');
+
+    if (data.done) {
+      streamBtn.disabled=true;
+      streamAllBtn.disabled=true;
+      setStatus('STREAM COMPLETE',true);
+      return false;
+    }
+
+    appendStreamRow(data.observation);
+    return data.remaining>0;
+
+  } catch(err) {
+    setStatus('ERROR: '+err.message);
+    return false;
+  }
+}
+
+async function playAllStream() {
+  if(streaming) return;
+  streaming=true;
+  streamAllBtn.disabled=true;
+
+  let more=true;
+  while(more && streaming){
+    more=await stepStream();
+    await new Promise(r=>setTimeout(r,140));
+  }
+
+  streaming=false;
+  if(!more) streamBtn.disabled=true;
+}
+
+document.getElementById('varToggle').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON') return;
+
+  document.querySelectorAll('#varToggle .tab')
+    .forEach(b=>b.classList.remove('active'));
+
+  e.target.classList.add('active');
+  currentVar=e.target.dataset.var;
+  loadSeries(currentVar);
+});
+
+
+async function analyzeManualData(){
+  const temperature = parseFloat(document.getElementById('manualTemperature').value);
+  const humidity = parseFloat(document.getElementById('manualHumidity').value);
+  const pressure = parseFloat(document.getElementById('manualPressure').value);
+  const wind_speed = parseFloat(document.getElementById('manualWindSpeed').value);
+  const resultBox = document.getElementById('manualResult');
+  const button = document.getElementById('manualAnalyzeBtn');
+
+  if (
+    Number.isNaN(temperature) ||
+    Number.isNaN(humidity) ||
+    Number.isNaN(pressure) ||
+    Number.isNaN(wind_speed)
+  ){
+    resultBox.className = 'manual-result';
+    resultBox.innerHTML =
+      '<div class="manual-error">Please enter all four sensor values.</div>';
+    return;
+  }
+
+  button.disabled = true;
+  resultBox.className = 'manual-result';
+  resultBox.innerHTML = 'Analyzing with Isolation Forest + LOF…';
+
+  try{
+    const response = await fetch('/api/manual',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        temperature,
+        humidity,
+        pressure,
+        wind_speed
+      })
+    });
+
+    const data = await response.json();
+
+    if(!response.ok || !data.ok){
+      throw new Error(data.error || 'Manual analysis failed');
+    }
+
+    const obs = data.observation;
+    const result = data.result || {};
+
+    let resultClass = 'normal';
+    if(obs.status === 'Suspicious') resultClass = 'suspicious';
+    if(obs.status === 'Anomalous/Requires Review') resultClass = 'anomalous';
+
+    const iso = result.iso_forest || {};
+    const lof = result.lof || {};
+
+    resultBox.className = 'manual-result ' + resultClass;
+
+    resultBox.innerHTML = `
+      <h3>${obs.status}</h3>
+
+      <div class="manual-result-grid">
+        <div class="manual-result-item">
+          <span>Temperature</span>
+          ${formatNumber(obs.temperature)} °C
+        </div>
+
+        <div class="manual-result-item">
+          <span>Humidity</span>
+          ${formatNumber(obs.humidity)} %
+        </div>
+
+        <div class="manual-result-item">
+          <span>Pressure</span>
+          ${formatNumber(obs.pressure)} hPa
+        </div>
+
+        <div class="manual-result-item">
+          <span>Wind speed</span>
+          ${formatNumber(obs.wind_speed)} m/s
+        </div>
+
+        <div class="manual-result-item">
+          <span>Isolation Forest</span>
+          ${iso.is_anomaly ? 'ANOMALY' : 'NORMAL'}
+        </div>
+
+        <div class="manual-result-item">
+          <span>Isolation Forest score</span>
+          ${formatNumber(iso.score)}
+        </div>
+
+        <div class="manual-result-item">
+          <span>LOF</span>
+          ${lof.is_anomaly ? 'ANOMALY' : 'NORMAL'}
+        </div>
+
+        <div class="manual-result-item">
+          <span>LOF score</span>
+          ${formatNumber(lof.score)}
+        </div>
+      </div>
+    `;
+
+    setStatus('MANUAL OBSERVATION ANALYZED', true);
+
+    // Also show the manual observation in the live feed.
+    appendStreamRow(obs);
+
+  }catch(err){
+    resultBox.className = 'manual-result';
+    resultBox.innerHTML =
+      `<div class="manual-error">Error: ${err.message}</div>`;
+  }finally{
+    button.disabled = false;
+  }
+}
+
+function clearManualData(){
+  document.getElementById('manualTemperature').value = '';
+  document.getElementById('manualHumidity').value = '';
+  document.getElementById('manualPressure').value = '';
+  document.getElementById('manualWindSpeed').value = '';
+
+  const resultBox = document.getElementById('manualResult');
+  resultBox.className = 'manual-result';
+  resultBox.innerHTML = '';
+}
+
+
+runBtn.addEventListener('click',runPipeline);
+streamBtn.addEventListener('click',stepStream);
+streamAllBtn.addEventListener('click',playAllStream);
+document.getElementById('manualAnalyzeBtn').addEventListener('click', analyzeManualData);
+document.getElementById('manualClearBtn').addEventListener('click', clearManualData);
+
+
+streamResetBtn.addEventListener('click',async()=>{
+  streaming=false;
+  await fetch('/api/stream/reset',{method:'POST'});
+  streamLog.innerHTML='<div class="empty">Feed reset.<br>Step through it to simulate incoming observations.</div>';
+  streamBtn.disabled=false;
+  streamAllBtn.disabled=false;
+  queueKpi.textContent=document.getElementById('nStream').value;
+  setStatus('FEED RESET',true);
+});
+</script>
+</body>
+</html>
