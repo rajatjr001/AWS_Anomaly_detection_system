@@ -1,6 +1,6 @@
 # AWS Anomaly Detection & Data Quality Framework — Prototype Code
 
-Implements the methodology from the synopsis *"A Machine Learning Framework for
+*"A Machine Learning Framework for
 Real-Time Anomaly Detection and Data Quality Assessment in Automatic Weather
 Stations."*
 
