@@ -15,7 +15,7 @@ MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 TOPIC = os.getenv("MQTT_TOPIC", "weather/station/+")
 FLASK_INGEST_URL = os.getenv(
-    "FLASK_INGEST_URL", "http://127.0.0.1:5000/api/ingest"
+    "FLASK_INGEST_URL", "http://127.0.0.1:5001/api/ingest"
 )
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")

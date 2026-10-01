@@ -5,6 +5,7 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const NUMERIC_FIELDS = ['temperature', 'humidity', 'pressure', 'rainfall', 'wind_speed', 'wind_direction'];
   const REFRESH_MS = 5000;
+  const CHART_WINDOW = 96; // 24 hours of 15-minute readings
   const MOTION_TARGETS = '.section > .label, .section > h2, .section > .sub, .section > .card, .grid > .card, .grid3 > .card, .two > .card, .band, pre';
   let chart = null;
 
@@ -113,8 +114,15 @@
       || '<tr><td colspan="8">No readings stored yet. Start the collector or submit a manual reading.</td></tr>';
   }
 
-  function renderChart(readings) {
-    const labels = readings.map(x => (x.timestamp || '').slice(11, 19));
+  function renderChart(all) {
+    // Chart the selected source; the last CHART_WINDOW points keep the line moving forward.
+    const source = $('chartSource').value;
+    const readings = all.filter(x => source === 'all' || x.source === source).slice(-CHART_WINDOW);
+    const last = readings[readings.length - 1];
+    $('live').textContent = last
+      ? `Latest ${last.source} reading: ${(last.timestamp || '').replace('T', ' ').slice(0, 16)} UTC · ${fmt(last.temperature)} °C · ${readings.length} points`
+      : 'No readings for this source yet. Start collector.py or submit a manual reading.';
+    const labels = readings.map(x => (x.timestamp || '').replace('T', ' ').slice(5, 16));
     const values = readings.map(x => x.temperature);
     if (!chart) {
       chart = new Chart($('trend'), {
@@ -155,7 +163,7 @@
     try {
       const [summary, latest, health] = await Promise.all([
         getJSON('/api/summary'),
-        getJSON('/api/readings/latest?limit=100'),
+        getJSON('/api/readings/latest?limit=300'),
         getJSON('/api/health')
       ]);
       $('health').textContent = health.trained ? 'MODEL READY · DATABASE CONNECTED' : 'MODEL NOT TRAINED';
@@ -199,6 +207,16 @@
     if (!$('sensorForm')) return; // only the dashboard page has these elements
     $('submit').addEventListener('click', submitReading);
     $('refresh').addEventListener('click', refreshDashboard);
+    $('chartSource').addEventListener('change', refreshDashboard);
+    if ('EventSource' in window) {
+      const es = new EventSource('/api/stream');
+      es.onopen = () => { $('stream').textContent = 'Live stream connected'; };
+      es.onerror = () => { $('stream').textContent = 'Stream reconnecting…'; };
+      es.addEventListener('reading', () => {
+        $('stream').textContent = `Live · new reading at ${new Date().toLocaleTimeString()}`;
+        refreshDashboard();
+      });
+    }
     refreshDashboard();
     setInterval(refreshDashboard, REFRESH_MS);
   }

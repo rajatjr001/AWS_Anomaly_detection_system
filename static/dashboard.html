@@ -39,6 +39,16 @@
   <div class="two">
    <div class="card">
     <h3 class="section-title">Sensor trend — temperature</h3>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:-6px 0 10px">
+     <label style="display:inline-flex;align-items:center;gap:8px;margin:0">Chart source
+      <select id="chartSource" style="background:#050505;color:#fff;border:1px solid #262626;border-radius:8px;padding:6px 8px">
+       <option value="open-meteo">Open-Meteo</option>
+       <option value="all">All sources</option>
+      </select>
+     </label>
+     <span class="muted" id="stream">Connecting to live stream…</span>
+    </div>
+    <div class="muted" id="live" style="margin:-6px 0 12px">Waiting for Open-Meteo…</div>
     <div class="chartbox"><canvas id="trend"></canvas></div>
    </div>
    <div class="card" id="manual">
@@ -70,7 +80,7 @@
  </section>
 </main>
 
-<footer><div class="wrap"><span>AWS Anomaly Watch</span><span>Dashboard refreshes every 5 seconds. Data is read from the database, not an in-memory queue.</span></div></footer>
+<footer><div class="wrap"><span>AWS Anomaly Watch</span><span>Dashboard updates instantly when a reading is saved. Data is read from the database, not an in-memory queue.</span></div></footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>

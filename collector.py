@@ -1,43 +1,30 @@
-"""Poll Open-Meteo and forward each returned observation to this Flask app.
+"""Poll Open-Meteo and send new readings to the Flask app.
 
-Run Flask in one terminal, then run this script in another terminal.
-This polls the provider; it does not make the provider update its forecast
-on every poll. For physical sensor data, use mqtt_consumer.py instead.
+Open-Meteo updates its "current" values about every 15 minutes, so a reading
+is forwarded only when its timestamp changes. The dashboard chart moves each
+time a new Open-Meteo reading arrives.
 """
 import os
 import time
 import requests
 
-FLASK_INGEST_URL = os.getenv(
-    "FLASK_INGEST_URL", "http://127.0.0.1:5000/api/ingest"
-)
+FLASK_INGEST_URL = os.getenv("FLASK_INGEST_URL", "http://127.0.0.1:5001/api/ingest")
 LATITUDE = float(os.getenv("WEATHER_LATITUDE", "29.6857"))
 LONGITUDE = float(os.getenv("WEATHER_LONGITUDE", "76.9905"))
-POLL_SECONDS = int(os.getenv("POLL_SECONDS", "300"))
-
+POLL_SECONDS = max(30, int(os.getenv("POLL_SECONDS", "60")))
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
+CURRENT_VARS = ["temperature_2m", "relative_humidity_2m", "surface_pressure",
+                "precipitation", "wind_speed_10m", "wind_direction_10m"]
 
 
 def fetch_weather():
-    params = {
-        "latitude": LATITUDE,
-        "longitude": LONGITUDE,
-        "current": ",".join([
-            "temperature_2m",
-            "relative_humidity_2m",
-            "surface_pressure",
-            "precipitation",
-            "wind_speed_10m",
-            "wind_direction_10m",
-        ]),
-        "timezone": "UTC",
-    }
+    params = {"latitude": LATITUDE, "longitude": LONGITUDE,
+              "current": ",".join(CURRENT_VARS), "timezone": "UTC"}
     response = requests.get(WEATHER_URL, params=params, timeout=20)
     response.raise_for_status()
     current = response.json()["current"]
-
     return {
-        "timestamp": current.get("time"),
+        "timestamp": current["time"],
         "station_id": "open-meteo-karnal",
         "source": "open-meteo",
         "temperature": current["temperature_2m"],
@@ -50,21 +37,28 @@ def fetch_weather():
 
 
 def main():
-    print(f"Polling Open-Meteo every {POLL_SECONDS} seconds.")
+    print(f"Polling Open-Meteo every {POLL_SECONDS} seconds. Sending to {FLASK_INGEST_URL}. Ctrl+C to stop.")
+    last_timestamp = None
     while True:
         try:
             observation = fetch_weather()
-            response = requests.post(
-                FLASK_INGEST_URL, json=observation, timeout=20
-            )
-            response.raise_for_status()
-            print("Stored:", response.json()["observation"])
+            if observation["timestamp"] == last_timestamp:
+                print("No new Open-Meteo reading yet:", observation["timestamp"])
+            else:
+                response = requests.post(FLASK_INGEST_URL, json=observation, timeout=20)
+                response.raise_for_status()
+                saved = response.json()["observation"]
+                last_timestamp = observation["timestamp"]
+                print("Stored:", saved["timestamp"], saved["status"], saved["temperature"], "C")
+        except requests.ConnectionError:
+            print(f"Cannot reach the app at {FLASK_INGEST_URL}. Is app.py running?")
+        except requests.HTTPError as exc:
+            print("HTTP error (the app may still be training):", exc)
         except requests.RequestException as exc:
-            print("Weather/API connection error:", exc)
+            print("Request error:", exc)
         except (KeyError, ValueError) as exc:
-            print("Invalid weather response:", exc)
-
-        time.sleep(max(60, POLL_SECONDS))
+            print("Invalid response:", exc)
+        time.sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":
