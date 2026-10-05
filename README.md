@@ -1,249 +1,184 @@
 # 🚨 AWS Anomaly Detection & Data Quality Monitoring System
 
-<p align="center">
+An intelligent **machine learning-based anomaly detection and data quality monitoring system** built with Python and Flask. The application detects unusual data patterns using **Isolation Forest** and **Local Outlier Factor (LOF)** while continuously monitoring data quality through a web-based dashboard.
 
-**An end-to-end machine learning system for anomaly detection, data quality analysis, and real-time monitoring.**
-
-</p>
-
-<p align="center">
-
-![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python\&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-Web%20API-black?logo=flask)
-![Scikit--Learn](https://img.shields.io/badge/Scikit--Learn-ML-orange?logo=scikit-learn)
-![Pandas](https://img.shields.io/badge/Pandas-Data%20Processing-150458?logo=pandas)
-![NumPy](https://img.shields.io/badge/NumPy-Numerical%20Computing-013243?logo=numpy)
-![License](https://img.shields.io/badge/License-MIT-green)
-
-</p>
+The project also provides **manual data analysis, real-time monitoring, anomaly statistics, and an interactive visualization dashboard**, making it useful for identifying abnormal or low-quality data in real-world data pipelines.
 
 ---
 
-## 📌 Overview
+## 🌟 Key Features
 
-The **AWS Anomaly Detection & Data Quality Monitoring System** is a machine-learning-based dashboard designed to identify unusual patterns in data and monitor data quality in real time.
+### 🔍 Anomaly Detection
 
-The system combines two anomaly detection techniques:
+* Detects abnormal observations using:
 
-* 🌲 **Isolation Forest**
-* 🔍 **Local Outlier Factor (LOF)**
+  * **Isolation Forest**
+  * **Local Outlier Factor (LOF)**
+* Supports unsupervised anomaly detection without requiring labeled data.
+* Provides anomaly labels and scores for individual records.
+* Allows comparison between different anomaly detection techniques.
 
-Along with anomaly detection, the application performs **data quality assessment** and provides a **real-time monitoring interface** through a Flask web application.
+### 📊 Data Quality Monitoring
 
-The project demonstrates how machine learning can be integrated into a practical monitoring pipeline rather than being used only as an offline model.
-
----
-
-## 🎯 Key Features
-
-### 🔎 Anomaly Detection
-
-Detects unusual observations using multiple unsupervised ML algorithms.
-
-* Isolation Forest
-* Local Outlier Factor (LOF)
-* Anomaly scores
-* Normal vs anomalous data identification
-
-### 📊 Data Quality Assessment
-
-Analyzes incoming data for common quality problems such as:
+The system evaluates incoming data based on important quality metrics such as:
 
 * Missing values
 * Duplicate records
 * Invalid values
-* Data consistency issues
-* Basic statistical characteristics
+* Data distribution
+* Outliers
+* Overall data quality score
+
+### 📈 Interactive Dashboard
+
+The web dashboard provides:
+
+* Dataset overview
+* Total records
+* Number of anomalies
+* Anomaly percentage
+* Data quality metrics
+* Visual representation of anomalies
+* Real-time monitoring information
+* Manual data input and analysis
 
 ### ⚡ Real-Time Monitoring
 
-The system can process incoming observations and continuously monitor them for abnormal behavior.
+The system can simulate and monitor streaming data to identify anomalies as new observations arrive.
 
-### 🖥️ Interactive Dashboard
+The monitoring component keeps track of:
 
-The Flask-based web interface provides:
+* Incoming records
+* Detected anomalies
+* Anomaly rate
+* Data quality
+* Monitoring history
 
-* Dataset statistics
-* Anomaly counts
-* Model results
-* Data-quality metrics
-* Monitoring information
-* Visual representation of results
-* Manual data input
+### ✍️ Manual Analysis
 
-### 🔌 REST API
+Users can manually enter feature values and send them to the backend for anomaly analysis.
 
-The backend exposes API endpoints that allow the frontend to communicate with the ML pipeline.
+The system processes the input using the trained anomaly detection models and returns the corresponding result.
 
 ---
 
-# 🧠 Machine Learning Pipeline
-
-The complete workflow can be represented as:
+# 🏗️ System Architecture
 
 ```text
-                    ┌─────────────────────┐
-                    │    Data Generation  │
-                    └──────────┬──────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Data Preprocessing  │
-                    └──────────┬──────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Feature Engineering │
-                    └──────────┬──────────┘
-                               ↓
-                 ┌─────────────┴─────────────┐
-                 ↓                           ↓
-       ┌──────────────────┐        ┌──────────────────┐
-       │ Isolation Forest │        │       LOF        │
-       └────────┬─────────┘        └────────┬─────────┘
-                ↓                           ↓
-                 └─────────────┬─────────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Anomaly Assessment  │
-                    └──────────┬──────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Data Quality Check  │
-                    └──────────┬──────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Real-Time Monitor   │
-                    └──────────┬──────────┘
-                               ↓
-                    ┌─────────────────────┐
-                    │ Flask Dashboard/API │
-                    └─────────────────────┘
+                    ┌──────────────────────┐
+                    │      User / Browser  │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │   Flask Web Server   │
+                    │       app.py         │
+                    └──────────┬───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+              ▼                ▼                ▼
+       ┌─────────────┐  ┌─────────────┐  ┌──────────────┐
+       │ Preprocess  │  │   Feature   │  │ Data Quality │
+       │    Data     │  │ Engineering │  │   Analysis   │
+       └──────┬──────┘  └──────┬──────┘  └──────────────┘
+              │                │
+              └────────┬───────┘
+                       ▼
+              ┌────────────────────┐
+              │ Anomaly Detection  │
+              ├────────────────────┤
+              │ Isolation Forest   │
+              │ LOF                │
+              └─────────┬──────────┘
+                        │
+                        ▼
+              ┌────────────────────┐
+              │ Real-Time Monitor  │
+              └─────────┬──────────┘
+                        │
+                        ▼
+              ┌────────────────────┐
+              │ Dashboard / JSON   │
+              │ API Responses      │
+              └────────────────────┘
 ```
 
 ---
 
-# 🤖 Algorithms Used
+# 🧠 Machine Learning Approach
 
 ## 1. Isolation Forest
 
-Isolation Forest is an unsupervised anomaly detection algorithm.
+Isolation Forest is an **unsupervised anomaly detection algorithm** that identifies unusual observations by isolating them from the rest of the data.
 
-The basic idea is that **anomalous observations are easier to isolate than normal observations**.
-
-It creates random decision trees and identifies observations that require fewer splits to become isolated.
+Anomalies generally require fewer random splits to become isolated.
 
 ### Advantages
 
-* Works well with large datasets
-* Does not require labeled anomalies
+* Works without labeled data
+* Efficient for large datasets
 * Suitable for high-dimensional data
-* Efficient for anomaly detection
+* Effective for detecting unusual observations
 
 ---
 
 ## 2. Local Outlier Factor (LOF)
 
-**Local Outlier Factor** detects anomalies by comparing the local density of an observation with the density of its neighboring observations.
+LOF identifies anomalies by comparing the **local density of a data point with the density of its neighboring points**.
 
-An observation can be considered anomalous when it has significantly lower local density than its neighbors.
+A point that has significantly lower local density than its neighbors can be considered an anomaly.
 
 ### Advantages
 
 * Detects local anomalies
-* Useful when data has different density regions
-* Works well for identifying observations that differ from their surrounding neighborhood
+* Useful when different regions of the dataset have different densities
+* Works well for identifying unusual local patterns
 
 ---
 
-# 📊 Data Quality Monitoring
+# 🔄 Data Processing Pipeline
 
-Anomaly detection alone does not guarantee that the underlying data is reliable.
-
-Therefore, the system also evaluates data quality.
-
-Typical checks include:
-
-| Check              | Purpose                               |
-| ------------------ | ------------------------------------- |
-| Missing Values     | Detect incomplete records             |
-| Duplicate Records  | Identify repeated observations        |
-| Data Types         | Verify expected data formats          |
-| Invalid Values     | Detect values outside expected ranges |
-| Statistical Checks | Understand unusual distributions      |
-| Completeness       | Measure how much data is available    |
-
-This provides a broader view of the dataset:
+The project follows the following workflow:
 
 ```text
-Data Quality
-      +
+Data Generation / Input
+          ↓
+Data Preprocessing
+          ↓
+Feature Engineering
+          ↓
+Data Quality Assessment
+          ↓
+Isolation Forest
+          ↓
+LOF
+          ↓
 Anomaly Detection
-      +
+          ↓
 Real-Time Monitoring
-      ↓
-Reliable Data Monitoring
+          ↓
+Dashboard Visualization
 ```
 
 ---
 
-# 🖥️ Dashboard
+# 🛠️ Technology Stack
 
-The application provides a web-based dashboard for interacting with the anomaly detection pipeline.
-
-### Dashboard capabilities
-
-* View dataset information
-* View anomaly statistics
-* Compare anomaly detection results
-* Monitor data quality
-* Submit manual values
-* Run anomaly detection on new observations
-* Monitor incoming data
-
-> 📸 Add your latest dashboard screenshot here if desired:
-
-```markdown
-![Dashboard](dashboard.png)
-```
-
----
-
-# 🛠️ Tech Stack
-
-## Programming Language
-
-* **Python**
-
-## Machine Learning
-
-* **Scikit-learn**
-* Isolation Forest
-* Local Outlier Factor
-
-## Data Processing
-
-* **Pandas**
-* **NumPy**
-
-## Backend
-
-* **Flask**
-* REST API
-
-## Frontend
-
-* HTML
-* CSS
-* JavaScript
-
-## Visualization
-
-* Chart-based dashboard components
-
-## Development Environment
-
-* Python virtual environment
-* Git
-* GitHub
+| Technology                               | Purpose                                    |
+| ---------------------------------------- | ------------------------------------------ |
+| **Python**                               | Core programming language                  |
+| **Flask**                                | Backend web framework and REST API         |
+| **Scikit-learn**                         | Machine learning and anomaly detection     |
+| **Pandas**                               | Data processing and manipulation           |
+| **NumPy**                                | Numerical computations                     |
+| **Matplotlib / Visualization Libraries** | Data visualization                         |
+| **HTML**                                 | Dashboard structure                        |
+| **CSS**                                  | Dashboard styling                          |
+| **JavaScript**                           | Frontend interaction and API communication |
+| **Gunicorn**                             | Production WSGI server                     |
+| **AWS Elastic Beanstalk**                | Cloud deployment                           |
+| **Git & GitHub**                         | Version control and source-code management |
 
 ---
 
@@ -253,76 +188,43 @@ The application provides a web-based dashboard for interacting with the anomaly 
 AWS_Anomaly_detection_system/
 │
 ├── app.py
+│   └── Flask application and API endpoints
 │
 ├── pipeline.py
+│   └── Data processing and machine learning pipeline
 │
 ├── requirements.txt
+│   └── Python dependencies
+│
+├── Procfile
+│   └── Production server configuration
+│
+├── .ebextensions/
+│   └── Elastic Beanstalk configuration
+│
+├── static/
+│   ├── index.html
+│   └── index_manual.html
 │
 ├── README.md
 │
-├── data/
-│   └── *.csv
-│
-├── static/
-│   └── index.html
-│
-└── output/
-    └── generated results
+└── .gitignore
 ```
-
-### Important Files
-
-### `app.py`
-
-Main Flask application.
-
-Responsible for:
-
-* Starting the web server
-* Providing API endpoints
-* Connecting the frontend with the ML pipeline
-* Handling incoming requests
-* Returning JSON responses
-
-### `pipeline.py`
-
-Contains the main machine-learning and data-processing pipeline.
-
-The pipeline handles:
-
-```text
-Data Generation
-      ↓
-Preprocessing
-      ↓
-Feature Engineering
-      ↓
-Isolation Forest
-      ↓
-LOF
-      ↓
-Data Quality
-      ↓
-Real-Time Monitoring
-```
-
-### `static/index.html`
-
-Frontend dashboard containing:
-
-* User interface
-* Data input
-* Dashboard components
-* API communication
-* Visualization
-
-### `requirements.txt`
-
-Contains the Python dependencies required to run the project.
 
 ---
 
-# ⚙️ Installation
+# 🚀 Getting Started
+
+## Prerequisites
+
+Make sure you have the following installed:
+
+* Python 3.x
+* pip
+* Git
+* Web browser
+
+---
 
 ## 1. Clone the Repository
 
@@ -343,15 +245,15 @@ cd AWS_Anomaly_detection_system
 ### macOS / Linux
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ### Windows
 
 ```bash
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
 ---
@@ -364,15 +266,13 @@ pip install -r requirements.txt
 
 ---
 
-# ▶️ Running the Application
-
-Start the Flask application:
+## 4. Run the Application
 
 ```bash
 python app.py
 ```
 
-The application will run locally.
+The application should start locally.
 
 Open your browser and visit:
 
@@ -382,75 +282,240 @@ http://127.0.0.1:5000
 
 ---
 
-# 🔌 API Architecture
+# ☁️ AWS Deployment
 
-The frontend communicates with the Flask backend through REST API endpoints.
+The application can be deployed using **AWS Elastic Beanstalk**.
 
-Conceptually:
+### Install Elastic Beanstalk CLI
 
-```text
-Browser
-   │
-   │ HTTP Request
-   ↓
-Flask API
-   │
-   ↓
-ML Pipeline
-   │
-   ├── Isolation Forest
-   │
-   ├── LOF
-   │
-   ├── Data Quality
-   │
-   └── Real-Time Monitoring
-   │
-   ↓
-JSON Response
-   │
-   ↓
-Dashboard
+```bash
+pip install awsebcli
 ```
 
-The `/api/manual` functionality allows manually entered observations to be passed through the anomaly detection pipeline.
+Initialize the application:
+
+```bash
+eb init
+```
+
+Create an environment:
+
+```bash
+eb create aws-anomaly-production
+```
+
+Deploy the application:
+
+```bash
+eb deploy
+```
+
+Open the deployed application:
+
+```bash
+eb open
+```
+
+Check environment status:
+
+```bash
+eb status
+```
 
 ---
 
-# 📥 Manual Data Detection
+# ⚙️ Production Server
 
-The dashboard supports manual data entry.
+For production deployment, the application uses **Gunicorn**.
 
-The workflow is:
+The `Procfile` contains:
 
 ```text
-User enters values
-       ↓
-Frontend
-       ↓
-/api/manual
-       ↓
-Preprocessing
-       ↓
-Isolation Forest + LOF
-       ↓
-Anomaly Result
-       ↓
-Dashboard
+web: gunicorn --bind :8000 app:app
 ```
 
-This allows users to test individual observations without needing to modify the underlying dataset.
+Here:
+
+* `app` → Python file `app.py`
+* `app` → Flask application object
+* `8000` → Port used by the production server
 
 ---
 
-# 📈 Example Output
+# 🔌 API Functionality
 
-A processed observation can contain information such as:
+The Flask backend provides API endpoints for interacting with the anomaly detection pipeline.
+
+Typical functionality includes:
+
+| Functionality      | Description                            |
+| ------------------ | -------------------------------------- |
+| Dataset processing | Processes input data                   |
+| Anomaly detection  | Runs Isolation Forest and LOF          |
+| Data quality       | Calculates quality metrics             |
+| Manual analysis    | Processes manually entered values      |
+| Monitoring         | Tracks incoming data                   |
+| Metrics            | Returns anomaly and quality statistics |
+
+The APIs communicate with the frontend using **JSON**.
+
+---
+
+# 📊 Dashboard
+
+The dashboard is designed to provide a quick overview of the system.
+
+### Dashboard capabilities
+
+* 📌 Dataset statistics
+* 📌 Anomaly count
+* 📌 Anomaly percentage
+* 📌 Data quality score
+* 📌 Model results
+* 📌 Real-time monitoring
+* 📌 Manual anomaly detection
+* 📌 Visual anomaly representation
+
+---
+
+# 🔬 Example Workflow
+
+Suppose the system receives a dataset containing:
 
 ```text
-Observation
-     ↓
-Isolation Forest
-     ↓
-Normal
+Feature 1    Feature 2    Feature 3
+-----------------------------------
+10           20           15
+11           21           14
+12           19           16
+500          800          900
+13           20           15
 ```
+
+The first three and last records follow a similar pattern.
+
+The record:
+
+```text
+500, 800, 900
+```
+
+is significantly different from the rest.
+
+The anomaly detection models can identify this observation as an **outlier**.
+
+---
+
+# 📈 Model Output
+
+Scikit-learn anomaly detection models generally produce labels such as:
+
+```text
+ 1  → Normal
+-1  → Anomaly
+```
+
+The dashboard converts these results into user-friendly anomaly statistics and visualizations.
+
+---
+
+# 🎯 Objectives
+
+The main objectives of this project are:
+
+1. Detect anomalies without requiring labeled datasets.
+2. Compare different unsupervised anomaly detection techniques.
+3. Monitor data quality automatically.
+4. Provide real-time anomaly monitoring.
+5. Create an easy-to-use visualization dashboard.
+6. Provide APIs for integrating anomaly detection into applications.
+7. Deploy the ML application on AWS.
+
+---
+
+# 💡 Real-World Applications
+
+This system can be adapted for:
+
+* 🏦 Financial fraud detection
+* 🛒 E-commerce transaction monitoring
+* 🏭 Industrial sensor monitoring
+* ☁️ Cloud infrastructure monitoring
+* 📡 IoT data monitoring
+* 📊 Data pipeline quality monitoring
+* 🔐 Cybersecurity anomaly detection
+* 💳 Transaction anomaly detection
+* 📈 Business data monitoring
+
+---
+
+# 🔮 Future Improvements
+
+Possible improvements include:
+
+* [ ] Add additional anomaly detection algorithms
+* [ ] Add XGBoost-based classification for labeled anomaly datasets
+* [ ] Implement automatic model selection
+* [ ] Add persistent database storage
+* [ ] Add user authentication
+* [ ] Add email/SMS anomaly alerts
+* [ ] Integrate AWS S3 for dataset storage
+* [ ] Integrate AWS CloudWatch for monitoring
+* [ ] Add Docker containerization
+* [ ] Add CI/CD using GitHub Actions
+* [ ] Add model performance tracking
+* [ ] Add automated data drift detection
+* [ ] Improve real-time streaming using AWS services
+
+---
+
+# 📚 Key Concepts Demonstrated
+
+This project demonstrates practical knowledge of:
+
+* Machine Learning
+* Unsupervised Learning
+* Anomaly Detection
+* Isolation Forest
+* Local Outlier Factor
+* Feature Engineering
+* Data Preprocessing
+* Data Quality Analysis
+* REST APIs
+* Flask
+* Frontend–Backend Integration
+* Real-Time Monitoring
+* Cloud Deployment
+* AWS Elastic Beanstalk
+* Git & GitHub
+* Production ML Application Deployment
+
+---
+
+# 👨‍💻 Author
+
+**Rajat Kumar**
+
+### Areas of Interest
+
+* Machine Learning
+* Artificial Intelligence
+* Python
+* Data Science
+* Cloud Computing
+* Software Development
+
+---
+
+# ⭐ Support
+
+If you find this project useful, consider giving the repository a ⭐ on GitHub.
+
+**Repository:**
+https://github.com/rajatjr001/AWS_Anomaly_detection_system
+
+---
+
+## 📜 License
+
+This project is intended for educational and demonstration purposes.

@@ -1,0 +1,22 @@
+branch-defaults:
+  default:
+    environment: aws-anomaly-production
+    group_suffix: null
+environment-defaults:
+  aws-anomaly-production:
+    branch: default
+    repository: AWS-Anomaly-Detection
+global:
+  application_name: AWS-Anomaly-Detection
+  branch: default
+  default_ec2_keyname: aws-eb
+  default_platform: Python 3.14 running on 64bit Amazon Linux 2023
+  default_region: ap-south-1
+  include_git_submodules: true
+  instance_profile: null
+  platform_name: null
+  platform_version: null
+  profile: null
+  repository: AWS-Anomaly-Detection
+  sc: git
+  workspace_type: Application
