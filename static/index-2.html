@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Station Anomaly Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--paper:#E8EDEF;--card:#F5F8F9;--ink:#14283A;--mute:#5B6E7C;--line:#CBD5DA;--trace:#1F6F78;--bad:#D1452F;--warn:#C98A1B;--ok:#2E7D5B;
+--h:'Bricolage Grotesque',system-ui,sans-serif;--b:'Instrument Sans',system-ui,sans-serif}
+@media(prefers-color-scheme:dark){:root{--paper:#0F1B26;--card:#16273A;--ink:#E6EEF2;--mute:#8CA0AE;--line:#27404F;--trace:#4FC0C9;--bad:#FF6B52;--warn:#E7B04A;--ok:#5CC49A}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--b);
+background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:32px 32px;background-attachment:fixed}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end;margin-bottom:20px}
+h1{font:700 clamp(26px,4vw,40px)/1.05 var(--h);margin:0;letter-spacing:-.02em}
+h2{font:600 17px var(--h);margin:0 0 10px}
+.sub{color:var(--mute);margin:6px 0 0;max-width:52ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--mute);gap:3px}
+input,select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+.controls input{width:92px}
+button{font:600 14px var(--b);border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:6px;padding:8px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+.stat b{display:block;font:700 30px var(--h);letter-spacing:-.02em}
+.stat span{color:var(--mute);font-size:13px}
+.bad{color:var(--bad)}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+@media(max-width:860px){.grid,.grid2{grid-template-columns:1fr}}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tabs button{background:transparent;color:var(--ink);border-color:var(--line);padding:5px 11px;font-weight:500}
+.tabs button[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.cv{position:relative;height:300px}.cv.s{height:220px}
+dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px}
+dt{color:var(--mute)}dd{margin:0;font-weight:600;text-align:right}
+.feed{max-height:230px;overflow:auto;margin-top:10px;font-size:13px}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.pill{border-radius:99px;padding:1px 9px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.pill.n{color:var(--ok)}.pill.a{color:var(--bad)}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.verdict{margin-top:12px;padding:12px;border-radius:8px;border:1px solid var(--line);display:none}
+.verdict.show{display:block}.verdict h3{font:700 20px var(--h);margin:0 0 4px}
+.sev-Critical{color:var(--bad)}.sev-High{color:var(--warn)}.sev-Medium{color:var(--trace)}.sev-Low{color:var(--mute)}
+.inc{padding:9px 0;border-top:1px solid var(--line)}.inc p{margin:2px 0;font-size:13px}.inc .t{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.act{padding:9px 0;border-top:1px solid var(--line)}.act b{display:block}.act span{font-size:13px;color:var(--mute)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%}
+.empty{color:var(--mute);padding:24px 0;text-align:center}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bad);color:#fff;padding:9px 16px;border-radius:8px;display:none;z-index:9}
+.pulse{animation:p 1.2s ease-out 1}@keyframes p{0%{box-shadow:0 0 0 0 var(--bad)}100%{box-shadow:0 0 0 14px transparent}}
+@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Weather station anomaly monitor</h1>
+    <p class="sub">Isolation Forest and LOF flag unusual sensor readings, then score each new observation as it arrives.</p>
+  </div>
+  <div class="controls">
+    <label>Days<input id="days" type="number" value="21" min="3" max="90"></label>
+    <label>Anomaly share<input id="frac" type="number" value="0.03" min="0.005" max="0.2" step="0.005"></label>
+    <label>Stream size<input id="nstream" type="number" value="40" min="5" max="200"></label>
+    <label>Your CSV<input id="csv" type="file" accept=".csv" style="width:170px"></label>
+    <button id="run">Run analysis</button>
+  </div>
+</header>
+
+<section class="stats" aria-label="Summary">
+  <div class="card stat"><b id="sPts">–</b><span>Readings analysed</span></div>
+  <div class="card stat"><b id="sAnom" class="bad">–</b><span>Anomalies found</span></div>
+  <div class="card stat"><b id="sRate">–</b><span>Anomaly rate</span></div>
+  <div class="card stat"><b id="sQual">–</b><span id="sQualL">Top data quality status</span></div>
+</section>
+
+<section class="grid">
+  <div class="card">
+    <h2>Sensor history</h2>
+    <div class="tabs" id="tabs" role="group" aria-label="Variable"></div>
+    <div class="cv"><canvas id="hist"></canvas></div>
+    <div id="histEmpty" class="empty">Run the analysis to see readings. Red dots are anomalies.</div>
+  </div>
+  <div style="display:grid;gap:14px;align-content:start">
+    <div class="card"><h2>Data quality</h2><div class="cv s"><canvas id="qual"></canvas></div></div>
+    <div class="card"><h2>Model results</h2><dl id="metrics"><dt>No results yet</dt><dd></dd></dl></div>
+  </div>
+</section>
+
+<section class="grid2">
+  <div class="card">
+    <h2>Live stream</h2>
+    <div class="controls" style="margin-bottom:10px">
+      <button id="play" disabled>Start stream</button>
+      <button id="step" class="ghost" disabled>Next reading</button>
+      <button id="reset" class="ghost" disabled>Reset</button>
+      <label style="flex:1;min-width:120px">Speed
+        <select id="speed"><option value="1500">Slow</option><option value="700" selected>Normal</option><option value="250">Fast</option></select></label>
+      <span id="remain" style="color:var(--mute);font-size:13px"></span>
+    </div>
+    <div class="cv s"><canvas id="live"></canvas></div>
+    <div class="feed" id="feed"><div class="empty">Alerts appear here as readings arrive.</div></div>
+  </div>
+  <div class="card">
+    <h2>Check a reading</h2>
+    <div class="form">
+      <label>Temperature (°C)<input id="m_temperature" type="number" step="any" value="28"></label>
+      <label>Humidity (%)<input id="m_humidity" type="number" step="any" value="60"></label>
+      <label>Pressure (hPa)<input id="m_pressure" type="number" step="any" value="1010"></label>
+      <label>Wind speed<input id="m_wind_speed" type="number" step="any" value="12"></label>
+      <label>Rainfall<input id="m_rainfall" type="number" step="any" value="0"></label>
+      <label>Wind direction (°)<input id="m_wind_direction" type="number" step="any" placeholder="optional"></label>
+    </div>
+    <button id="score" disabled>Check reading</button>
+    <div class="verdict" id="verdict"></div>
+  </div>
+</section>
+<section class="grid2" style="margin-top:14px">
+  <div class="card">
+    <h2>Incident inbox</h2>
+    <div class="tabs" id="sevTabs" role="group" aria-label="Severity"></div>
+    <div class="feed" id="incs" style="max-height:420px"><div class="empty">Incidents appear after you run the analysis.</div></div>
+    <p style="margin:10px 0 0"><a href="/api/incidents.csv" id="dl">Download incidents (CSV)</a></p>
+  </div>
+  <div class="card">
+    <h2>Recommended actions</h2>
+    <div id="health"></div>
+    <div id="recs"><div class="empty">Run the analysis first.</div></div>
+  </div>
+</section>
+</div>
+<div id="toast" role="alert"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const VARS=['temperature','humidity','pressure','rainfall','wind_speed','wind_direction'];
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let hist,qual,live,variable='temperature',timer=null,done=false;
+
+const isAnom=v=>v===true||v===1||v==='Anomaly'||v==='anomaly';
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',4000)}
+async function api(url,opts){
+  try{
+    const r=await fetch(url,opts);const j=await r.json();
+    if(!r.ok||j.ok===false)throw new Error(j.error||'Request failed');
+    return j;
+  }catch(e){toast(e.message);throw e}
+}
+const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
+const fmt=v=>typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(3)):String(v);
+const tlabel=t=>new Date(t).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+
+function mkLine(el,label){
+  return new Chart($(el),{type:'line',data:{labels:[],datasets:[{label,data:[],borderColor:css('--trace'),borderWidth:1.5,tension:.25,
+    pointRadius:[],pointBackgroundColor:[]}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},
+    scales:{x:{ticks:{maxTicksLimit:6,color:css('--mute')},grid:{color:css('--line')}},y:{ticks:{color:css('--mute')},grid:{color:css('--line')}}}}});
+}
+function setPoints(ch,labels,vals,flags){
+  const d=ch.data.datasets[0];ch.data.labels=labels;d.data=vals;
+  d.pointRadius=flags.map(f=>f?5:0);d.pointBackgroundColor=flags.map(()=>css('--bad'));ch.update();
+}
+
+// tabs
+VARS.forEach(v=>{const b=document.createElement('button');b.textContent=v.replace('_',' ');b.setAttribute('aria-pressed',v===variable);
+  b.onclick=()=>{variable=v;[...$('tabs').children].forEach(x=>x.setAttribute('aria-pressed',x===b));loadSeries()};$('tabs').appendChild(b)});
+
+async function loadSeries(){
+  const j=await api('/api/timeseries?variable='+variable);
+  const p=j.points;
+  $('histEmpty').style.display='none';
+  setPoints(hist,p.map(x=>tlabel(x.timestamp)),p.map(x=>x[variable]),p.map(x=>isAnom(x.ml_anomaly_flag)));
+  const n=p.filter(x=>isAnom(x.ml_anomaly_flag)).length;
+  $('sPts').textContent=p.length.toLocaleString();$('sAnom').textContent=n;
+  $('sRate').textContent=(p.length?n/p.length*100:0).toFixed(1)+'%';
+}
+
+function renderQuality(counts){
+  const k=Object.keys(counts),tot=k.reduce((s,x)=>s+counts[x],0)||1;
+  const pal=[css('--ok'),css('--warn'),css('--bad'),css('--trace'),css('--mute')];
+  qual.data={labels:k,datasets:[{data:k.map(x=>counts[x]),backgroundColor:k.map((_,i)=>pal[i%pal.length]),borderWidth:0}]};
+  qual.options.plugins.legend={display:true,position:'right',labels:{color:css('--ink'),boxWidth:12}};qual.update();
+  const top=k.sort((a,b)=>counts[b]-counts[a])[0];
+  if(top){$('sQual').textContent=(counts[top]/tot*100).toFixed(0)+'%';$('sQualL').textContent='of readings: '+top}
+}
+function renderMetrics(m){
+  const dl=$('metrics');dl.innerHTML='';
+  const add=(k,v)=>{const a=document.createElement('dt'),b=document.createElement('dd');a.textContent=k.replace(/_/g,' ');b.textContent=fmt(v);dl.append(a,b)};
+  Object.entries(m||{}).forEach(([k,v])=>{
+    if(v&&typeof v==='object')Object.entries(v).forEach(([k2,v2])=>{if(typeof v2!=='object')add(k+' · '+k2,v2)});
+    else add(k,v)});
+}
+
+$('run').onclick=async()=>{
+  $('run').disabled=true;$('run').textContent='Running…';
+  try{
+    const j=await post('/api/run',{n_days:+$('days').value,anomaly_fraction:+$('frac').value,n_stream:+$('nstream').value});
+    renderQuality(j.quality_counts);renderMetrics(j.metrics);await loadSeries();await loadRecs();resetStream(true);
+    $('play').disabled=$('step').disabled=$('reset').disabled=$('score').disabled=false;
+  }finally{$('run').disabled=false;$('run').textContent='Run analysis'}
+};
+
+// live stream
+const liveLabels=[],liveVals=[],liveFlags=[];
+function addFeed(o){
+  const f=$('feed');if(f.querySelector('.empty'))f.innerHTML='';
+  const r=document.createElement('div');r.className='row';
+  const pill=document.createElement('span');pill.className='pill '+(o.is_anomaly?'a':'n');pill.textContent=o.is_anomaly?'Anomaly':'Normal';
+  const t=document.createElement('span');t.textContent=`${tlabel(o.timestamp)} · ${fmt(o.temperature)}°C, ${fmt(o.humidity)}%, ${fmt(o.pressure)} hPa`;
+  const s=document.createElement('span');s.style.color='var(--mute)';s.textContent='score '+fmt(o.anomaly_score);
+  r.append(pill,t,s);f.prepend(r);
+  if(o.is_anomaly){r.classList.add('pulse');toast('Anomaly detected at '+tlabel(o.timestamp))}
+}
+async function nextReading(){
+  if(done)return;
+  const j=await post('/api/stream/next');
+  if(j.done){stopStream();done=true;$('remain').textContent='Stream finished';$('play').disabled=true;return}
+  const o=j.observation;liveLabels.push(tlabel(o.timestamp));liveVals.push(o.temperature);liveFlags.push(!!o.is_anomaly);
+  setPoints(live,liveLabels,liveVals,liveFlags);addFeed(o);$('remain').textContent=j.remaining+' left';
+}
+function stopStream(){clearInterval(timer);timer=null;$('play').textContent='Start stream'}
+$('play').onclick=()=>{
+  if(timer){stopStream();return}
+  $('play').textContent='Pause';nextReading();
+  timer=setInterval(()=>nextReading().catch(stopStream),+$('speed').value);
+};
+$('speed').onchange=()=>{if(timer){clearInterval(timer);timer=setInterval(()=>nextReading().catch(stopStream),+$('speed').value)}};
+$('step').onclick=()=>nextReading();
+async function resetStream(quiet){
+  stopStream();done=false;liveLabels.length=liveVals.length=liveFlags.length=0;
+  if(!quiet)await post('/api/stream/reset');
+  setPoints(live,[],[],[]);$('feed').innerHTML='<div class="empty">Alerts appear here as readings arrive.</div>';
+  $('remain').textContent='';$('play').disabled=false;
+}
+$('reset').onclick=()=>resetStream(false);
+
+// manual
+$('score').onclick=async()=>{
+  const b={};['temperature','humidity','pressure','wind_speed','rainfall','wind_direction'].forEach(k=>b[k]=$('m_'+k).value);
+  const j=await post('/api/manual',b),r=j.result,v=$('verdict');
+  const bad=r.is_anomaly;v.className='verdict show';v.style.borderColor=bad?css('--bad'):css('--ok');
+  v.innerHTML='';const h=document.createElement('h3');h.textContent=bad?'Anomalous reading':'Looks normal';h.style.color=bad?css('--bad'):css('--ok');
+  const p=document.createElement('p');p.style.margin='0';
+  p.textContent=`Combined score ${fmt(r.anomaly_score)}. Isolation Forest: ${r.iso_forest.is_anomaly?'anomaly':'normal'} (${fmt(r.iso_forest.score)}). LOF: ${r.lof.is_anomaly?'anomaly':'normal'} (${fmt(r.lof.score)}).`;
+  v.append(h,p);
+  (r.why||[]).forEach(w=>{const q=el('p','',w.text);q.style.cssText='margin:6px 0 0;font-size:13px';v.append(q)});
+};
+
+let INCS=[],sevF='All';
+['All','Critical','High','Medium','Low'].forEach(v=>{const b=document.createElement('button');b.textContent=v;b.setAttribute('aria-pressed',v==='All');
+  b.onclick=()=>{sevF=v;[...$('sevTabs').children].forEach(x=>x.setAttribute('aria-pressed',x===b));drawIncs()};$('sevTabs').appendChild(b)});
+function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e}
+function drawIncs(){
+  const box=$('incs');box.innerHTML='';
+  const list=INCS.filter(i=>sevF==='All'||i.severity===sevF).slice(0,60);
+  if(!list.length){box.append(el('div','empty','No incidents at this severity.'));return}
+  list.forEach(i=>{const d=el('div','inc'),t=el('div','t');
+    t.append(el('span','pill sev-'+i.severity,i.severity),el('b','',i.cause),el('span','',`${tlabel(i.start)} · ${i.minutes} min`));
+    d.append(t,el('p','',`${i.sensor} read ${i.value} where about ${i.expected} is usual (${i.peak_z}x normal spread). ${i.models_agree}% of readings flagged by both models.`),
+      el('p','','Do this: '+i.action));d.lastChild.style.fontWeight='600';box.append(d)});
+}
+async function loadRecs(){
+  const [a,b]=await Promise.all([api('/api/incidents'),api('/api/recommendations')]);
+  INCS=a.incidents;drawIncs();
+  const h=$('health');h.innerHTML='';
+  b.sensors.forEach(s=>{const r=el('div');r.style.margin='0 0 8px';
+    const top=el('div','',`${s.sensor}: health ${s.health}/100 (${s.incidents} incidents)`);top.style.fontSize='13px';
+    const bar=el('div','bar'),f=el('i');f.style.width=s.health+'%';f.style.background=s.health<70?css('--bad'):s.health<90?css('--warn'):css('--ok');bar.append(f);r.append(top,bar);h.append(r)});
+  const rc=$('recs');rc.innerHTML='';
+  b.actions.forEach(x=>{const d=el('div','act'),t=el('b','');t.append(el('span','pill sev-'+(x.priority==='P1'?'Critical':x.priority==='P2'?'High':'Low'),x.priority),' '+x.title);d.append(t,el('span','',x.detail));rc.append(d)});
+}
+$('csv').onchange=async()=>{
+  const f=$('csv').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
+  $('run').disabled=true;$('run').textContent='Analysing…';
+  try{const j=await api('/api/upload',{method:'POST',body:fd});
+    renderQuality(j.quality_counts);renderMetrics(j.metrics);await loadSeries();await loadRecs();resetStream(true);
+    $('play').disabled=$('step').disabled=$('reset').disabled=$('score').disabled=false;
+  }finally{$('run').disabled=false;$('run').textContent='Run analysis';$('csv').value=''}
+};
+hist=mkLine('hist','Readings');live=mkLine('live','Temperature');
+qual=new Chart($('qual'),{type:'doughnut',data:{labels:[],datasets:[{data:[]}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false}}}});
+</script>
+</body>
+</html>

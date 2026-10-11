@@ -10,7 +10,6 @@ environment-defaults:
     repository: AWS-Anomaly-Detection
 global:
   application_name: AWS-Anomaly-Detection
-  branch: default
   default_ec2_keyname: aws-eb
   default_platform: Python 3.14 running on 64bit Amazon Linux 2023
   default_region: ap-south-1
@@ -19,6 +18,5 @@ global:
   platform_name: null
   platform_version: null
   profile: null
-  repository: AWS-Anomaly-Detection
   sc: git
   workspace_type: Application

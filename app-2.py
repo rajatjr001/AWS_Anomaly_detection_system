@@ -16,10 +16,10 @@ Then open http://127.0.0.1:5000
 from flask import Flask, jsonify, request, send_from_directory
 import numpy as np
 import pandas as pd
+
 import os, tempfile
 from flask import Response
 import recommender as rec
-
 import pipeline as pl
 
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -150,6 +150,7 @@ def manual():
             rainfall=values["rainfall"],
             wind_direction=wind_direction,
         )
+
         result["why"] = rec.explain_values(rec.baseline(STATE["df"]), values, int(body.get("hour", pd.Timestamp.now().hour)))
         timestamp = pd.Timestamp.utcnow().isoformat()
 
@@ -258,6 +259,17 @@ def stream_reset():
     STATE["stream_cursor"] = 0
     STATE["stream_log"] = []
     return jsonify({"ok": True})
+
+
+
+
+
+# ===== PASTE THIS BLOCK ABOVE `if __name__ == "__main__":` in app.py =====
+# Also add these imports at the top of app.py:
+#   import os, tempfile
+#   from flask import Response
+#   import recommender as rec
+
 def _fit_state(df, n_stream):
     """Same pipeline as /api/run, but for a DataFrame you supply."""
     df = pl.preprocess_data(df)
@@ -270,8 +282,8 @@ def _fit_state(df, n_stream):
                  stream_queue=df.iloc[-n_stream:].reset_index(drop=True), stream_cursor=0, stream_log=[])
     return {"ok": True, "n_points": len(history_df), "split_info": split_info, "metrics": metrics,
             "quality_counts": history_df["data_quality_status"].value_counts().to_dict()}
- 
- 
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload_csv():
     f = request.files.get("file")
@@ -291,13 +303,13 @@ def upload_csv():
     except Exception as exc:
         app.logger.exception("Upload failed")
         return jsonify({"ok": False, "error": f"Could not analyse this file: {exc}"}), 400
- 
- 
+
+
 def _need_data():
     if STATE["df"] is None:
         return jsonify({"ok": False, "error": "Run the analysis first."}), 400
- 
- 
+
+
 @app.route("/api/incidents")
 def incidents():
     err = _need_data()
@@ -305,8 +317,8 @@ def incidents():
         return err
     incs = rec.find_incidents(STATE["df"], rec.baseline(STATE["df"]))
     return jsonify({"ok": True, "incidents": incs})
- 
- 
+
+
 @app.route("/api/recommendations")
 def recommendations():
     err = _need_data()
@@ -314,8 +326,8 @@ def recommendations():
         return err
     b = rec.baseline(STATE["df"])
     return jsonify({"ok": True, **rec.recommendations(STATE["df"], b, rec.find_incidents(STATE["df"], b))})
- 
- 
+
+
 @app.route("/api/incidents.csv")
 def incidents_csv():
     err = _need_data()
@@ -324,8 +336,10 @@ def incidents_csv():
     incs = rec.find_incidents(STATE["df"], rec.baseline(STATE["df"]))
     csv = pd.DataFrame(incs).drop(columns=["sensor_key", "hour"], errors="ignore").to_csv(index=False)
     return Response(csv, mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=incidents.csv"})
- 
+
+# ===== ALSO: inside manual(), right after `result = pl.score_manual_observation(...)`, add: =====
+#     result["why"] = rec.explain_values(rec.baseline(STATE["df"]), values, int(body.get("hour", pd.Timestamp.now().hour)))
+# ===== And DELETE the old upload_csv() route at the very bottom of app.py. =====
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-
