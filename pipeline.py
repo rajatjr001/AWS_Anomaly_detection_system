@@ -603,3 +603,23 @@ def run_pipeline(csv_path: str = None):
 
 if __name__ == "__main__":
     run_pipeline()
+
+import pandas as pd
+
+def profile_dataset(df):
+    profile = {
+        "rows": int(df.shape[0]),
+        "columns": int(df.shape[1]),
+        "missing_values": int(df.isnull().sum().sum()),
+        "duplicate_rows": int(df.duplicated().sum()),
+        "column_types": {
+            col: str(dtype)
+            for col, dtype in df.dtypes.items()
+        },
+        "missing_by_column": {
+            col: int(count)
+            for col, count in df.isnull().sum().items()
+        }
+    }
+
+    return profile

@@ -2,6 +2,8 @@ branch-defaults:
   default:
     environment: aws-anomaly-production
     group_suffix: null
+  main:
+    environment: aws-anomaly-production
 environment-defaults:
   aws-anomaly-production:
     branch: default

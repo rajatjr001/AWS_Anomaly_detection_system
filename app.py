@@ -259,3 +259,20 @@ def stream_reset():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+
+@app.route("/api/upload", methods=["POST"])
+def upload_csv():
+    if "file" not in request.files:
+        return jsonify({"error": "No file selected"}), 400
+
+    file = request.files["file"]
+
+    if not file.filename.lower().endswith(".csv"):
+        return jsonify({"error": "Please upload a CSV file"}), 400
+
+    try:
+        df = pd.read_csv(file)
+        profile = profile_dataset(df)
+        return jsonify(profile)
+    except Exception:
+        return jsonify({"error": "Could not read this CSV file"}), 400
