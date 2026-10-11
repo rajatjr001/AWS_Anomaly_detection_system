@@ -16,6 +16,9 @@ Then open http://127.0.0.1:5000
 from flask import Flask, jsonify, request, send_from_directory
 import numpy as np
 import pandas as pd
+import os, tempfile
+from flask import Response
+import recommender as rec
 
 import pipeline as pl
 
@@ -147,7 +150,7 @@ def manual():
             rainfall=values["rainfall"],
             wind_direction=wind_direction,
         )
-
+        result["why"] = rec.explain_values(rec.baseline(STATE["df"]), values, int(body.get("hour", pd.Timestamp.now().hour)))
         timestamp = pd.Timestamp.utcnow().isoformat()
 
         entry = {
@@ -255,24 +258,74 @@ def stream_reset():
     STATE["stream_cursor"] = 0
     STATE["stream_log"] = []
     return jsonify({"ok": True})
-
+def _fit_state(df, n_stream):
+    """Same pipeline as /api/run, but for a DataFrame you supply."""
+    df = pl.preprocess_data(df)
+    df = pl.engineer_features(df)
+    df, split_info = pl.detect_anomalies(df)
+    df = pl.assess_data_quality(df)
+    metrics = pl.evaluate_model(df)
+    history_df = df.iloc[:-n_stream].reset_index(drop=True)
+    STATE.update(df=history_df, metrics=metrics, monitor=pl.build_realtime_monitor(history_df),
+                 stream_queue=df.iloc[-n_stream:].reset_index(drop=True), stream_cursor=0, stream_log=[])
+    return {"ok": True, "n_points": len(history_df), "split_info": split_info, "metrics": metrics,
+            "quality_counts": history_df["data_quality_status"].value_counts().to_dict()}
+ 
+ 
+@app.route("/api/upload", methods=["POST"])
+def upload_csv():
+    f = request.files.get("file")
+    if f is None or not f.filename.lower().endswith(".csv"):
+        return jsonify({"ok": False, "error": "Choose a .csv file."}), 400
+    path = os.path.join(tempfile.gettempdir(), "upload_aws.csv")
+    f.save(path)
+    try:
+        df = pl.load_aws_data(path)
+        need = ["timestamp", "temperature", "humidity", "pressure", "rainfall", "wind_speed", "wind_direction"]
+        miss = [c for c in need if c not in df.columns]
+        if miss:
+            return jsonify({"ok": False, "error": "CSV is missing columns: " + ", ".join(miss)}), 400
+        if len(df) < 200:
+            return jsonify({"ok": False, "error": "Need at least 200 rows."}), 400
+        return jsonify(_fit_state(df, min(40, len(df) // 5)))
+    except Exception as exc:
+        app.logger.exception("Upload failed")
+        return jsonify({"ok": False, "error": f"Could not analyse this file: {exc}"}), 400
+ 
+ 
+def _need_data():
+    if STATE["df"] is None:
+        return jsonify({"ok": False, "error": "Run the analysis first."}), 400
+ 
+ 
+@app.route("/api/incidents")
+def incidents():
+    err = _need_data()
+    if err:
+        return err
+    incs = rec.find_incidents(STATE["df"], rec.baseline(STATE["df"]))
+    return jsonify({"ok": True, "incidents": incs})
+ 
+ 
+@app.route("/api/recommendations")
+def recommendations():
+    err = _need_data()
+    if err:
+        return err
+    b = rec.baseline(STATE["df"])
+    return jsonify({"ok": True, **rec.recommendations(STATE["df"], b, rec.find_incidents(STATE["df"], b))})
+ 
+ 
+@app.route("/api/incidents.csv")
+def incidents_csv():
+    err = _need_data()
+    if err:
+        return err
+    incs = rec.find_incidents(STATE["df"], rec.baseline(STATE["df"]))
+    csv = pd.DataFrame(incs).drop(columns=["sensor_key", "hour"], errors="ignore").to_csv(index=False)
+    return Response(csv, mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=incidents.csv"})
+ 
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
 
-@app.route("/api/upload", methods=["POST"])
-def upload_csv():
-    if "file" not in request.files:
-        return jsonify({"error": "No file selected"}), 400
-
-    file = request.files["file"]
-
-    if not file.filename.lower().endswith(".csv"):
-        return jsonify({"error": "Please upload a CSV file"}), 400
-
-    try:
-        df = pd.read_csv(file)
-        profile = profile_dataset(df)
-        return jsonify(profile)
-    except Exception:
-        return jsonify({"error": "Could not read this CSV file"}), 400
