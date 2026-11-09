@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Anomaly Watch — Docs</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav><div class="wrap">
+ <a class="brand" href="index.html"><span class="logo"></span>AWS Anomaly Watch</a>
+ <div class="navlinks"><a href="index.html">Home</a><a href="dashboard.html">Dashboard</a><a href="features.html">Features</a><a href="docs.html" aria-current="page">Docs</a><a href="about.html">About</a></div>
+ <a class="btn" href="dashboard.html">Open dashboard</a>
+</div></nav>
+
+<header class="page-hero"><div class="wrap">
+ <span class="eyebrow">Docs</span>
+ <h1>API reference</h1>
+ <p class="lead">The dashboard uses four endpoints on the same server as this site.</p>
+</div></header>
+
+<main class="wrap">
+ <section class="section">
+  <div class="label">Endpoints</div>
+  <h2>Summary, readings, health, and ingestion</h2>
+  <p class="sub">Paths are relative to your server, so the dashboard works without extra configuration.</p>
+  <div class="card"><div class="table-wrap"><table>
+   <thead><tr><th>Method</th><th>Path</th><th>What it does</th></tr></thead>
+   <tbody>
+    <tr><td>GET</td><td>/api/health</td><td>Reports whether the model is trained.</td></tr>
+    <tr><td>GET</td><td>/api/summary</td><td>Returns total readings, anomalies, suspicious count, and anomaly percentage.</td></tr>
+    <tr><td>GET</td><td>/api/readings/latest?limit=100</td><td>Returns the most recent stored readings.</td></tr>
+    <tr><td>POST</td><td>/api/ingest</td><td>Scores one observation, saves it, and returns its status and anomaly score.</td></tr>
+   </tbody>
+  </table></div></div>
+ </section>
+
+ <section class="section">
+  <div class="label">Submit a reading</div>
+  <h2>Request body for /api/ingest</h2>
+  <p class="sub">Send this JSON with a POST request.</p>
+  <pre><code>{
+  "temperature": 25,
+  "humidity": 60,
+  "pressure": 1012,
+  "rainfall": 0,
+  "wind_speed": 10,
+  "wind_direction": 180,
+  "station_id": "manual-station",
+  "source": "manual"
+}</code></pre>
+  <p class="sub" style="margin-top:16px">The response includes <code>observation.status</code> and <code>observation.anomaly_score</code>.</p>
+ </section>
+</main>
+
+<footer><div class="wrap"><span>AWS Anomaly Watch</span><span>Automatic Weather Station · ML anomaly detection</span></div></footer>
+<script src="app.js"></script>
+</body>
+</html>
