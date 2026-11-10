@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Anomaly Watch — Dashboard</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav><div class="wrap">
+ <a class="brand" href="index.html"><span class="logo"></span>AWS Anomaly Watch</a>
+ <div class="navlinks"><a href="index.html">Home</a><a href="dashboard.html" aria-current="page">Dashboard</a><a href="features.html">Features</a><a href="docs.html">Docs</a><a href="about.html">About</a></div>
+ <div class="pill" id="health">Connecting…</div>
+</div></nav>
+
+<header class="page-hero"><div class="wrap">
+ <span class="eyebrow">Live monitor</span>
+ <h1>Station dashboard</h1>
+ <p class="lead">Totals, trends, and recent readings, all read from the database.</p>
+</div></header>
+
+<main class="wrap">
+ <section class="section" id="overview">
+  <div class="label">01 · Overview</div>
+  <h2>Station health at a glance</h2>
+  <p class="sub">Totals refresh automatically every 5 seconds.</p>
+  <div class="grid">
+   <div class="card kpi"><label>Total readings stored</label><div class="value" id="total">0</div></div>
+   <div class="card kpi"><label>Anomalies</label><div class="value bad" id="anomalies">0</div></div>
+   <div class="card kpi"><label>Suspicious</label><div class="value" id="suspicious">0</div></div>
+   <div class="card kpi"><label>Anomaly rate</label><div class="value" id="rate">0%</div></div>
+  </div>
+ </section>
+
+ <section class="section" id="trends">
+  <div class="label">02 · Trends and input</div>
+  <h2>Temperature and manual readings</h2>
+  <p class="sub">A live view of the temperature trend, plus a form for manual readings.</p>
+  <div class="two">
+   <div class="card">
+    <h3 class="section-title">Sensor trend — temperature</h3>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:-6px 0 10px">
+     <label style="display:inline-flex;align-items:center;gap:8px;margin:0">Chart source
+      <select id="chartSource" style="background:#050505;color:#fff;border:1px solid #262626;border-radius:8px;padding:6px 8px">
+       <option value="open-meteo">Open-Meteo</option>
+       <option value="all">All sources</option>
+      </select>
+     </label>
+     <span class="muted" id="stream">Connecting to live stream…</span>
+    </div>
+    <div class="muted" id="live" style="margin:-6px 0 12px">Waiting for Open-Meteo…</div>
+    <div class="chartbox"><canvas id="trend"></canvas></div>
+   </div>
+   <div class="card" id="manual">
+    <h3 class="section-title">Submit a sensor observation</h3>
+    <div class="muted">Use this to test the ingestion and ML scoring API.</div>
+    <form id="sensorForm">
+     <div><label>Temperature °C</label><input name="temperature" type="number" step="any" value="25" required></div>
+     <div><label>Humidity %</label><input name="humidity" type="number" step="any" value="60" required></div>
+     <div><label>Pressure hPa</label><input name="pressure" type="number" step="any" value="1012" required></div>
+     <div><label>Rainfall mm</label><input name="rainfall" type="number" step="any" value="0"></div>
+     <div><label>Wind speed km/h</label><input name="wind_speed" type="number" step="any" value="10" required></div>
+     <div><label>Wind direction °</label><input name="wind_direction" type="number" step="any" value="180"></div>
+     <div style="grid-column:1/-1"><label>Station ID</label><input name="station_id" value="manual-station"></div>
+    </form>
+    <div class="actions"><button class="btn" id="submit">Analyze &amp; save reading</button><button class="btn secondary" id="refresh">Refresh dashboard</button></div>
+    <div id="message"></div>
+   </div>
+  </div>
+ </section>
+
+ <section class="section" id="readings">
+  <div class="label">03 · Records</div>
+  <h2>Persisted sensor observations</h2>
+  <p class="sub">Each row is read from the database.</p>
+  <div class="card"><div class="table-wrap"><table>
+   <thead><tr><th>Time</th><th>Station</th><th>Source</th><th>Temp</th><th>Humidity</th><th>Pressure</th><th>Wind</th><th>ML status</th></tr></thead>
+   <tbody id="rows"><tr><td colspan="8">Waiting for observations…</td></tr></tbody>
+  </table></div></div>
+ </section>
+</main>
+
+<footer><div class="wrap"><span>AWS Anomaly Watch</span><span>Dashboard updates instantly when a reading is saved. Data is read from the database, not an in-memory queue.</span></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

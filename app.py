@@ -1,52 +1,158 @@
-"""
-Backend API for the AWS Anomaly Detection & Data Quality dashboard.
+import os
+import json
+import logging
+import queue
+import threading
+from datetime import datetime, timezone
 
-Wraps the pipeline in pipeline.py (data generation -> preprocessing ->
-feature engineering -> Isolation Forest / LOF anomaly detection -> data
-quality assessment -> real-time monitor) behind a small Flask JSON API,
-so the frontend (static/index.html) can run the pipeline and display
-results, and step through a simulated real-time observation stream.
-
-Run:
-    pip install -r requirements.txt
-    python app.py
-Then open http://127.0.0.1:5000
-"""
-
-from flask import Flask, jsonify, request, send_from_directory
 import numpy as np
 import pandas as pd
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 import pipeline as pl
+from database import init_db, save_reading, get_latest_readings, get_summary
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, static_folder=os.path.join(BASE_DIR, "static"), static_url_path="")
+logging.basicConfig(level=logging.INFO)
 
-# In-memory state for the current session (single-user demo app).
-STATE = {
-    "df": None,          # full processed dataframe (history)
-    "metrics": None,
-    "monitor": None,      # RealTimeMonitor fit on the "historical" portion
-    "stream_queue": None,  # remaining rows to simulate as they "arrive"
-    "stream_cursor": 0,
-    "stream_log": [],      # results of processed streamed points
-}
+SENSOR_FIELDS = pl.SENSOR_COLS
+PHYSICAL_LIMITS = pl.PHYSICAL_LIMITS
+LATITUDE = float(os.getenv("WEATHER_LATITUDE", "29.6857"))
+LONGITUDE = float(os.getenv("WEATHER_LONGITUDE", "76.9905"))
+TRAIN_DAYS = 365
+LOCK = threading.RLock()  # re-entrant: train_models() can run inside a locked ingest call
 
-
-def _clean_for_json(value):
-    """Replace NaN/inf with None so jsonify doesn't choke."""
-    if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
-        return None
-    return value
+SUBSCRIBERS = set()  # one queue per open dashboard stream
+SUB_LOCK = threading.Lock()
 
 
-def df_to_records(df: pd.DataFrame, columns) -> list:
-    out = []
-    for _, row in df.iterrows():
-        record = {"timestamp": row["timestamp"].isoformat()}
-        for c in columns:
-            record[c] = _clean_for_json(row[c])
-        out.append(record)
-    return out
+class ModelNotReady(RuntimeError):
+    """Raised when a reading arrives before the background training finishes."""
+
+
+def publish(event):
+    """Push a new-reading event to every connected dashboard."""
+    message = json.dumps(event, default=str)
+    with SUB_LOCK:
+        for q in list(SUBSCRIBERS):
+            try:
+                q.put_nowait(message)
+            except queue.Full:
+                pass  # a stalled browser catches up on its next 5-second poll
+
+
+STATE = {"history": None, "scaler": None, "isolation_forest": None, "lof": None, "trained_at": None}
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_training_history(n_days=TRAIN_DAYS):
+    """Real Open-Meteo history for this location, cached to disk. Synthetic data only if the download fails."""
+    data_dir = os.path.join(BASE_DIR, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    path = os.path.join(data_dir, "training_history_real.csv")
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    try:
+        raw = pl.fetch_openmeteo_history(LATITUDE, LONGITUDE, n_days=n_days)
+        raw.to_csv(path, index=False)
+        app.logger.info("Downloaded %s rows of Open-Meteo history", len(raw))
+        return raw
+    except Exception:
+        app.logger.exception("Open-Meteo history download failed; using synthetic baseline.")
+        return pl.generate_synthetic_aws_data(n_days=n_days, anomaly_fraction=0.02)
+
+
+def train_models(n_days=TRAIN_DAYS):
+    """Load the baseline and fit the detectors once, not per request."""
+    raw = load_training_history(n_days)
+    raw = pl.preprocess_data(raw)
+    history = pl.engineer_features(raw)
+    if len(history) < 30:
+        raise RuntimeError("Training history must contain at least 30 rows.")
+
+    scaler, iso, lof = pl.build_manual_detectors(history)
+    with LOCK:
+        STATE.update(history=raw.reset_index(drop=True), scaler=scaler,
+                     isolation_forest=iso, lof=lof, trained_at=utc_now_iso())
+    app.logger.info("Models trained on %s historical rows", len(history))
+    return len(history)
+
+
+def score_observation(payload):
+    if STATE["history"] is None or STATE["scaler"] is None:
+        raise ModelNotReady("The model is still training. Try again in about a minute.")
+
+    values = {}
+    for field in SENSOR_FIELDS:
+        raw_value = payload.get(field, 0 if field == "rainfall" else None)
+        if raw_value is None or raw_value == "":
+            if field == "wind_direction":
+                raw_value = float(STATE["history"]["wind_direction"].iloc[-1])
+            else:
+                raise ValueError(f"Missing required field: {field}")
+        value = float(raw_value)
+        if not np.isfinite(value):
+            raise ValueError(f"{field} must be a finite number.")
+        values[field] = value
+
+    feature_row, quality_info = pl.make_manual_feature_row(STATE["history"], **values)
+    X = STATE["scaler"].transform(feature_row[pl.FEATURE_COLUMNS].values)
+
+    iso_anomaly = int(STATE["isolation_forest"].predict(X)[0]) == -1
+    iso_score = float(STATE["isolation_forest"].decision_function(X)[0])
+    lof_anomaly = int(STATE["lof"].predict(X)[0]) == -1
+    lof_score = float(STATE["lof"].decision_function(X)[0])
+    hard_issue = bool(quality_info["hard_issue"])
+
+    if hard_issue or (iso_anomaly and lof_anomaly):
+        status = "Anomalous/Requires Review"
+    elif iso_anomaly or lof_anomaly:
+        status = "Suspicious"
+    else:
+        status = "Normal/Good"
+
+    return {
+        **values,
+        "timestamp": payload.get("timestamp") or utc_now_iso(),
+        "station_id": str(payload.get("station_id", "station-001")),
+        "source": str(payload.get("source", "http")),
+        "is_anomaly": bool(hard_issue or iso_anomaly or lof_anomaly),
+        "anomaly_score": round(iso_score, 6),
+        "status": status,
+        "iso_forest_anomaly": iso_anomaly,
+        "iso_forest_score": round(iso_score, 6),
+        "lof_anomaly": lof_anomaly,
+        "lof_score": round(lof_score, 6),
+        "hard_quality_issue": hard_issue,
+        "out_of_range": quality_info["out_of_range"],
+    }
+
+
+def _ingest(body):
+    try:
+        with LOCK:
+            result = score_observation(body)
+            invalid_fields = [f for f, (lo, hi) in PHYSICAL_LIMITS.items()
+                              if not lo <= result[f] <= hi]
+            if invalid_fields:
+                result.update(hard_quality_issue=True, status="Anomalous/Requires Review",
+                              is_anomaly=True, invalid_fields=invalid_fields)
+            save_reading(result)
+            STATE["history"] = pl.update_history(STATE["history"], result)
+        publish({"timestamp": result["timestamp"], "source": result["source"],
+                 "temperature": result["temperature"], "status": result["status"]})
+        return jsonify({"ok": True, "observation": result}), 201
+    except ModelNotReady as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+    except (TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception:
+        app.logger.exception("Ingestion failed")
+        return jsonify({"ok": False, "error": "Processing failed. Check server logs."}), 500
 
 
 @app.route("/")
@@ -54,208 +160,98 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
-@app.route("/api/run", methods=["POST"])
-def run():
-    """
-    Runs the full offline pipeline (Steps 1-6, 8, 9) on a fresh synthetic
-    dataset, and sets aside the LAST N_STREAM rows to simulate as a live
-    incoming stream via /api/stream/next. Returns a summary for the dashboard.
-    """
-    body = request.get_json(silent=True) or {}
-    n_days = int(body.get("n_days", 21))
-    anomaly_fraction = float(body.get("anomaly_fraction", 0.03))
-    n_stream = int(body.get("n_stream", 40))
-
-    df = pl.generate_synthetic_aws_data(n_days=n_days, anomaly_fraction=anomaly_fraction)
-    df = pl.preprocess_data(df)
-    df = pl.engineer_features(df)
-    df, split_info = pl.detect_anomalies(df)
-    df = pl.assess_data_quality(df)
-    metrics = pl.evaluate_model(df)
-
-    history_df = df.iloc[:-n_stream].reset_index(drop=True)
-    stream_df = df.iloc[-n_stream:].reset_index(drop=True)
-
-    monitor = pl.build_realtime_monitor(history_df)
-
-    STATE["df"] = history_df
-    STATE["metrics"] = metrics
-    STATE["monitor"] = monitor
-    STATE["stream_queue"] = stream_df
-    STATE["stream_cursor"] = 0
-    STATE["stream_log"] = []
-
-    quality_counts = history_df["data_quality_status"].value_counts().to_dict()
-
+@app.get("/api/health")
+def health():
     return jsonify({
         "ok": True,
-        "n_points": len(history_df),
-        "n_stream_pending": len(stream_df),
-        "split_info": split_info,
-        "quality_counts": quality_counts,
-        "metrics": metrics,
-        "missing_counts": {
-            c: int(history_df[f"{c}_was_missing"].sum())
-            for c in ["temperature", "humidity", "pressure", "rainfall", "wind_speed", "wind_direction"]
-        },
+        "trained": STATE["history"] is not None,
+        "trained_at": STATE["trained_at"],
+        "database": "connected",
     })
 
 
-@app.route("/api/manual", methods=["POST"])
-def manual():
-    """
-    Scores a manually entered sensor observation using the actual
-    Isolation Forest + LOF pipeline on the currently loaded historical data.
-    """
-    if STATE["df"] is None:
-        return jsonify({
-            "ok": False,
-            "error": "Run the main pipeline first via POST /api/run"
-        }), 400
-
+@app.post("/api/train")
+def train():
     body = request.get_json(silent=True) or {}
-
-    required = ["temperature", "humidity", "pressure", "wind_speed"]
-    missing = [k for k in required if k not in body or body[k] in (None, "")]
-    if missing:
-        return jsonify({
-            "ok": False,
-            "error": f"Missing required values: {', '.join(missing)}"
-        }), 400
-
-    try:
-        values = {
-            "temperature": float(body["temperature"]),
-            "humidity": float(body["humidity"]),
-            "pressure": float(body["pressure"]),
-            "wind_speed": float(body["wind_speed"]),
-            "rainfall": float(body.get("rainfall", 0.0)),
-        }
-
-        wind_direction = body.get("wind_direction")
-        if wind_direction in (None, ""):
-            wind_direction = None
-        else:
-            wind_direction = float(wind_direction)
-
-        result = pl.score_manual_observation(
-            history_df=STATE["df"],
-            temperature=values["temperature"],
-            humidity=values["humidity"],
-            pressure=values["pressure"],
-            wind_speed=values["wind_speed"],
-            rainfall=values["rainfall"],
-            wind_direction=wind_direction,
-        )
-
-        timestamp = pd.Timestamp.utcnow().isoformat()
-
-        entry = {
-            "timestamp": timestamp,
-            "temperature": values["temperature"],
-            "humidity": values["humidity"],
-            "pressure": values["pressure"],
-            "wind_speed": values["wind_speed"],
-            "is_anomaly": result["is_anomaly"],
-            "anomaly_score": result["anomaly_score"],
-            "status": result["status"],
-            "iso_forest_anomaly": result["iso_forest"]["is_anomaly"],
-            "iso_forest_score": result["iso_forest"]["score"],
-            "lof_anomaly": result["lof"]["is_anomaly"],
-            "lof_score": result["lof"]["score"],
-        }
-
-        STATE["stream_log"].append(entry)
-
-        return jsonify({
-            "ok": True,
-            "observation": entry,
-            "result": result,
-        })
-
-    except (TypeError, ValueError) as exc:
-        return jsonify({
-            "ok": False,
-            "error": f"Invalid sensor value: {exc}"
-        }), 400
-    except Exception as exc:
-        app.logger.exception("Manual anomaly scoring failed")
-        return jsonify({
-            "ok": False,
-            "error": str(exc)
-        }), 500
+    n_days = max(3, min(int(body.get("n_days", TRAIN_DAYS)), 730))
+    count = train_models(n_days=n_days)
+    return jsonify({"ok": True, "training_rows": count, "trained_at": STATE["trained_at"]})
 
 
-@app.route("/api/timeseries")
+@app.post("/api/ingest")
+def ingest():
+    return _ingest(request.get_json(silent=True) or {})
+
+
+@app.post("/api/manual")
+def manual():
+    body = request.get_json(silent=True) or {}
+    body["source"] = "manual"
+    return _ingest(body)
+
+
+@app.get("/api/readings/latest")
+def readings_latest():
+    limit = request.args.get("limit", default=100, type=int)
+    limit = max(1, min(limit or 100, 1000))
+    return jsonify({"ok": True, "readings": get_latest_readings(limit)})
+
+
+@app.get("/api/summary")
+def summary():
+    return jsonify({"ok": True, **get_summary()})
+
+
+@app.get("/api/timeseries")
 def timeseries():
-    """Returns the processed history as JSON for charting."""
-    if STATE["df"] is None:
-        return jsonify({"ok": False, "error": "Run the pipeline first via POST /api/run"}), 400
-
     variable = request.args.get("variable", "temperature")
-    valid_vars = ["temperature", "humidity", "pressure", "rainfall", "wind_speed", "wind_direction"]
-    if variable not in valid_vars:
-        return jsonify({"ok": False, "error": f"variable must be one of {valid_vars}"}), 400
-
-    df = STATE["df"]
-    cols = [variable, "ml_anomaly_flag", "data_quality_status", "iso_forest_score"]
-    records = df_to_records(df, cols)
-    return jsonify({"ok": True, "variable": variable, "points": records})
-
-
-@app.route("/api/quality_summary")
-def quality_summary():
-    if STATE["df"] is None:
-        return jsonify({"ok": False, "error": "Run the pipeline first via POST /api/run"}), 400
-    counts = STATE["df"]["data_quality_status"].value_counts().to_dict()
-    return jsonify({"ok": True, "quality_counts": counts, "metrics": STATE["metrics"]})
+    if variable not in set(SENSOR_FIELDS):
+        return jsonify({"ok": False, "error": "Unsupported variable"}), 400
+    rows = get_latest_readings(500)
+    return jsonify({
+        "ok": True,
+        "variable": variable,
+        "points": [{"timestamp": r["timestamp"], variable: r[variable],
+                    "is_anomaly": r["is_anomaly"], "status": r["status"]} for r in rows],
+    })
 
 
-@app.route("/api/stream/next", methods=["POST"])
-def stream_next():
-    """
-    Simulates the next observation "arriving" from an AWS station and scores
-    it in real time using the pre-fitted RealTimeMonitor (Step 7).
-    """
-    if STATE["monitor"] is None or STATE["stream_queue"] is None:
-        return jsonify({"ok": False, "error": "Run the pipeline first via POST /api/run"}), 400
+@app.get("/api/stream")
+def stream():
+    """Server-Sent Events: the browser gets a 'reading' event as soon as a reading is saved."""
+    q = queue.Queue(maxsize=100)
 
-    cursor = STATE["stream_cursor"]
-    queue = STATE["stream_queue"]
-    if cursor >= len(queue):
-        return jsonify({"ok": True, "done": True, "message": "No more simulated observations."})
+    def events():
+        with SUB_LOCK:
+            SUBSCRIBERS.add(q)
+        try:
+            yield "retry: 3000\n\n"
+            while True:
+                try:
+                    message = q.get(timeout=20)
+                    yield f"event: reading\ndata: {message}\n\n"
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+        finally:
+            with SUB_LOCK:
+                SUBSCRIBERS.discard(q)
 
-    row = queue.iloc[cursor]
-    result = STATE["monitor"].score_observation(row)
-
-    entry = {
-        "timestamp": row["timestamp"].isoformat(),
-        "temperature": _clean_for_json(row["temperature"]),
-        "humidity": _clean_for_json(row["humidity"]),
-        "pressure": _clean_for_json(row["pressure"]),
-        "wind_speed": _clean_for_json(row["wind_speed"]),
-        "is_anomaly": result["is_anomaly"],
-        "anomaly_score": round(result["anomaly_score"], 4),
-        "status": result["status"],
-    }
-    STATE["stream_cursor"] += 1
-    STATE["stream_log"].append(entry)
-
-    return jsonify({"ok": True, "done": False, "observation": entry,
-                     "remaining": len(queue) - STATE["stream_cursor"]})
+    return Response(events(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@app.route("/api/stream/log")
-def stream_log():
-    return jsonify({"ok": True, "log": STATE["stream_log"]})
+init_db()
 
 
-@app.route("/api/stream/reset", methods=["POST"])
-def stream_reset():
-    STATE["stream_cursor"] = 0
-    STATE["stream_log"] = []
-    return jsonify({"ok": True})
+def background_train():
+    try:
+        train_models()
+    except Exception:
+        app.logger.exception("Model training failed; fix the data source and call POST /api/train.")
 
+
+# Train in the background so the web server accepts requests immediately.
+threading.Thread(target=background_train, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=False)

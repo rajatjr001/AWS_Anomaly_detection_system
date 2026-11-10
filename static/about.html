@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Anomaly Watch — About</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav><div class="wrap">
+ <a class="brand" href="index.html"><span class="logo"></span>AWS Anomaly Watch</a>
+ <div class="navlinks"><a href="index.html">Home</a><a href="dashboard.html">Dashboard</a><a href="features.html">Features</a><a href="docs.html">Docs</a><a href="about.html" aria-current="page">About</a></div>
+ <a class="btn" href="dashboard.html">Open dashboard</a>
+</div></nav>
+
+<header class="page-hero"><div class="wrap">
+ <span class="eyebrow">About</span>
+ <h1>Built for watching weather stations closely</h1>
+ <p class="lead">A small monitoring tool that checks each reading as it arrives.</p>
+</div></header>
+
+<main class="wrap">
+ <section class="section">
+  <div class="label">Our approach</div>
+  <h2>Why readings are checked as they arrive</h2>
+  <div class="two" style="margin-top:20px">
+   <div class="card">
+    <p>Weather stations send a steady stream of measurements. A single unusual value can be an early sign of a sensor fault or a real event, so it is worth catching early.</p>
+    <p>AWS Anomaly Watch scores each reading with a trained model and keeps every result in a database, so the history is still there after a restart.</p>
+   </div>
+   <div class="card">
+    <h3>At a glance</h3>
+    <p>Data source: automatic weather stations and manual entries.</p>
+    <p>Scoring: a trained machine learning model.</p>
+    <p>Storage: a database, not an in-memory queue.</p>
+   </div>
+  </div>
+ </section>
+</main>
+
+<footer><div class="wrap"><span>AWS Anomaly Watch</span><span>Automatic Weather Station · ML anomaly detection</span></div></footer>
+<script src="app.js"></script>
+</body>
+</html>

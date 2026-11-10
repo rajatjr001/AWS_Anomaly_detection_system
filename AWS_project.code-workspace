@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "AWS_project",
+			"path": "."
+		},
+		{
+			"name": "static",
+			"path": "../Downloads/AWS_Anomaly_detection_system_upgraded/static"
+		}
+	],
+	"settings": {
+		"python-envs.defaultEnvManager": "ms-python.python:system"
+	}
+}
